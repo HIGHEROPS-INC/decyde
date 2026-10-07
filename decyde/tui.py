@@ -11,7 +11,7 @@ from pathlib import Path
 
 from decyde import splash
 from decyde.delivery import dismiss_question, record_answer
-from decyde.store import change_marker, connect, get_question, human_name, load_config, row_dict
+from decyde.store import PORT, change_marker, connect, get_question, human_name, load_config, row_dict
 
 def tui(show_splash: bool = True) -> None:
     import curses
@@ -196,31 +196,39 @@ def tui(show_splash: bool = True) -> None:
             st["hits"] = []
             h, W = scr.getmaxyx()
             opn = [q for q in st["rows"] if q["status"] == "open"]
-            prompt = f"{human_name().lower()}@{socket.gethostname().split('.')[0]}:~$ "
-            put(0, 1, prompt, C["dim"])
-            put(0, 1 + len(prompt), "decyde", C["purple3"] | curses.A_BOLD)
-            stats = f"open {len(opn)}  blocking {sum(q['urgency'] == 'high' for q in opn)}  " \
+            prompt = f"{human_name().lower()}@{socket.gethostname().split('.')[0]}"
+            stats = f"open {len(opn)}  ·  blocking {sum(q['urgency'] == 'high' for q in opn)}  ·  " \
                     f"awaiting ack {sum(q['status'] == 'answered' for q in st['rows'])}"
-            put(0, max(30, W - len(stats) - 2), stats, C["purple4"] if opn else C["dim"])
+            stat_attr = C["purple4"] | curses.A_BOLD if opn else C["dim"]
+            if splash.big_header_fits(h, W):
+                header.draw(scr, C, [(prompt, C["dim"]), (splash.TAGLINE, C["teal2"]), ("", 0),
+                                     (stats, stat_attr), (f"http://127.0.0.1:{PORT}", C["faint"])])
+                tabs_y = splash.HEADER_ROWS
+            else:
+                put(0, 1, prompt + ":~$ ", C["dim"])
+                put(0, 1 + len(prompt) + 4, "decyde", C["purple3"] | curses.A_BOLD)
+                put(0, max(30, W - len(stats) - 2), stats, stat_attr)
+                tabs_y = 1
             x = 1
             for i, (_, label, want) in enumerate(VIEWS):
                 n = sum(q["status"] in want for q in st["rows"])
-                x = button(1, x, f"{i + 1}:{label} {n}", ("tab", i), C["tabsel"] if i == st["view"] else C["dim"])
-            put(2, 0, "─" * W, C["faint"])
+                x = button(tabs_y, x, f"{i + 1}:{label} {n}", ("tab", i), C["tabsel"] if i == st["view"] else C["dim"])
+            put(tabs_y + 1, 0, "─" * W, C["faint"])
+            first = tabs_y + 2
 
             items = visible()
             st["sel"] = max(0, min(st["sel"], len(items) - 1))
-            list_h = max(3, min(len(items), (h - 7) * 2 // 5))
+            list_h = max(3, min(len(items), (h - first - 4) * 2 // 5))
             st["scroll"] = max(0, min(st["scroll"], max(0, len(items) - list_h)))
             if st["sel"] < st["scroll"]:
                 st["scroll"] = st["sel"]
             if st["sel"] >= st["scroll"] + list_h:
                 st["scroll"] = st["sel"] - list_h + 1
-            st["list"] = (3, 3 + list_h)
+            st["list"] = (first, first + list_h)
             if not items:
-                put(4, 3, "all clear. no agent is waiting on you." if st["view"] == 0 else "nothing here yet.", C["dim"])
+                put(first + 1, 3, "all clear. no agent is waiting on you." if st["view"] == 0 else "nothing here yet.", C["dim"])
             for row, q in enumerate(items[st["scroll"]:st["scroll"] + list_h]):
-                y, idx = 3 + row, st["scroll"] + row
+                y, idx = first + row, st["scroll"] + row
                 selected = idx == st["sel"]
                 blocking = q["status"] == "open" and q["urgency"] == "high"
                 color = C["purple4"] | curses.A_BOLD if blocking else C["purple2"] if q["status"] == "open" \
@@ -235,11 +243,11 @@ def tui(show_splash: bool = True) -> None:
                 put(y, 23, f"{age(q['created_at']):>4}", C["dim"] | base if not selected else base)
                 put(y, 29, q["title"], base | (curses.A_BOLD if selected else 0), W - 30)
                 st["hits"].append((y, 0, W, ("sel", idx)))
-            top = 3 + list_h
+            top = first + list_h
             put(top, 0, "─" * W, C["faint"])
             above, below = st["scroll"], max(0, len(items) - st["scroll"] - list_h)
             if above:
-                put(2, W - 14, f" ▲ {above} more ", C["dim"])
+                put(first - 1, W - 14, f" ▲ {above} more ", C["dim"])
             if below:
                 put(top, W - 14, f" ▼ {below} more ", C["dim"])
 
@@ -396,14 +404,19 @@ def tui(show_splash: bool = True) -> None:
                   "down": ("move", 1), "j": ("move", 1), "1": ("tab", 0), "2": ("tab", 1), "3": ("tab", 2),
                   "a": ("answer",), "enter": ("answer",), "e": ("editor",), "o": ("pickopt",), "d": ("dismiss",)}
 
+        header = splash.Header()
         load()
+        last_check = 0.0
         while True:
-            m = change_marker(conn)
-            if m != st["marker"]:
-                st["marker"] = m
-                load()
+            if time.time() - last_check >= 1:
+                last_check = time.time()
+                m = change_marker(conn)
+                if m != st["marker"]:
+                    st["marker"] = m
+                    load()
             draw()
-            ev = read_event(1000)
+            h, W = scr.getmaxyx()
+            ev = read_event(120 if splash.big_header_fits(h, W) else 1000)
             if ev is None:
                 continue
             if not (ev[0] == "key" and ev[1] == "resize"):
