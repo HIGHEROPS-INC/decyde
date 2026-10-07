@@ -38,6 +38,8 @@ guess the answer to the blocked part.
   answered, 2 while still open, 3 if dismissed. Check at natural breakpoints and
   before you finish your turn.
 - If you have nothing else to do, block on it: `decyde wait 12 --timeout 900`.
+  Otherwise keep each command under a couple of minutes while a question is
+  open: an answer handed over between tool calls waits for a running one.
 - When you have the answer, run `decyde ack 12` and act on it.
 - If the question stops mattering: `decyde cancel 12 --reason "..."`.
 
