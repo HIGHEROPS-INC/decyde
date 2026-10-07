@@ -1,6 +1,8 @@
 """Getting an answer back to the agent that asked: Herdr, tmux, or Claude Code hooks.
 
-Polling (`decyde check`) always works; these routes wake an agent that has gone idle.
+Answers go out as soon as they are given: agents queue a message typed mid-turn and read it
+at their next step. The only thing worth waiting for is an approval dialog, which typed text
+would answer. Polling (`decyde check`) always works too.
 """
 from __future__ import annotations
 
@@ -14,9 +16,10 @@ from datetime import datetime
 from decyde.store import connect, get_question, human_name, now
 
 SHELLS = {"zsh", "bash", "fish", "sh", "dash", "ksh", "tcsh", "csh", "nu", "login", "-zsh", "-bash"}
-# Text that means the agent is mid-turn or showing a dialog. Typing then could answer the dialog.
-BUSY_MARKERS = ("esc to interrupt", "esc to cancel", "do you want to", "(y/n)", "[y/n]", "allow command",
-                "yes, proceed", "approve", "press enter to")
+# Text that means the agent is showing an approval dialog. Typing then could answer the dialog,
+# so wait. A working agent is fine: Claude Code and Codex queue what is typed mid-turn.
+DIALOG_MARKERS = ("esc to cancel", "do you want to", "(y/n)", "[y/n]", "allow command", "yes, proceed",
+                  "press enter to")
 RETRY_HOURS = 6
 
 
@@ -48,8 +51,8 @@ def push_herdr(q: dict) -> str:
     kind = (agent.get("agent") or "").lower()
     if q["agent"] in ("claude", "codex") and kind and kind != q["agent"]:
         return f"skipped: herdr pane now runs {kind}"
-    if agent.get("agent_status") in ("working", "blocked"):
-        return "pending"  # retry later; never interrupt a working or blocked agent
+    if agent.get("agent_status") == "blocked":
+        return "pending"  # an approval dialog is up; typing would answer it
     res = run(["herdr", "agent", "prompt", q["herdr_pane"], answer_prompt(q)])
     if res is None:
         return "pending"
@@ -71,12 +74,8 @@ def push_tmux(q: dict) -> str:
         return "skipped: tmux pane closed"
     if cur.stdout.strip().lower() in SHELLS:
         return "skipped: agent no longer running in that tmux pane"
-    # tmux cannot tell us the agent's state, so require a still screen with no dialog on it.
-    snap = lambda: (run(base + ["capture-pane", "-p", *target, "-S", "-20"]) or subprocess.CompletedProcess([], 1)).stdout
-    first = snap()
-    time.sleep(2)
-    second = snap()
-    if first != second or any(m in second.lower() for m in BUSY_MARKERS):
+    screen = run(base + ["capture-pane", "-p", *target, "-S", "-20"])
+    if screen is None or any(m in screen.stdout.lower() for m in DIALOG_MARKERS):
         return "pending"
     if run(base + ["load-buffer", "-b", "decyde", "-"], stdin=answer_prompt(q)) is None:
         return "pending"
@@ -101,13 +100,17 @@ def try_push(q: dict) -> str:
 
 
 def deliver(conn, qid: int) -> None:
-    q = get_question(conn, qid)
-    if not q or q["status"] != "answered" or q["delivery"] != "pending":
+    # Claim the answer first so a Claude Code hook cannot deliver it at the same moment.
+    if not conn.execute("UPDATE questions SET delivery='pushing' WHERE id=? AND status='answered' "
+                        "AND delivery='pending'", (qid,)).rowcount:
         return
-    state = try_push(q)
-    if state == "pending":
-        return
-    mark_delivered(conn, qid, state)
+    state = "pending"
+    try:
+        state = try_push(get_question(conn, qid))
+    finally:
+        conn.execute(
+            "UPDATE questions SET delivery=?, delivered_at=?, updated_at=? WHERE id=? AND delivery='pushing'",
+            (state, now() if state.startswith("pushed") else None, now(), qid))
 
 
 def mark_delivered(conn, qid: int, state: str) -> None:
@@ -118,7 +121,7 @@ def mark_delivered(conn, qid: int, state: str) -> None:
 
 
 def delivery_loop(stop: threading.Event) -> None:
-    """Retry pushes for answers whose agent was busy when the human replied."""
+    """Retry pushes for answers that were waiting on an approval dialog."""
     conn = connect()
     while not stop.wait(15):
         rows = conn.execute(
@@ -126,7 +129,7 @@ def delivery_loop(stop: threading.Event) -> None:
         for r in rows:
             age = time.time() - datetime.fromisoformat(r["answered_at"]).timestamp()
             if age > RETRY_HOURS * 3600:
-                mark_delivered(conn, r["id"], "skipped: agent stayed busy")
+                mark_delivered(conn, r["id"], "skipped: approval dialog never cleared")
             else:
                 try:
                     deliver(conn, r["id"])

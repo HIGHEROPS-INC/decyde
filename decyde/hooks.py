@@ -1,7 +1,8 @@
 """Claude Code hooks: deliver answers to plain-terminal Claude sessions.
 
 Claude Code cannot be woken once idle, so:
-  post-tool-use  remembers which session ran `decyde ask`
+  post-tool-use  remembers which session ran `decyde ask`, and hands a working Claude
+                 any new answer at its next tool call (as typed messages arrive mid-turn)
   stop           when that session tries to stop with an open question, waits for
                  the answer (default 10 min) and hands it back so Claude continues
   prompt         injects any late answer into the next message the human sends
@@ -20,32 +21,40 @@ ASK_RE = re.compile(r"\b(decyde|dhub)\s+ask\b")
 ID_RE = re.compile(r"question #(\d+)|\"id\":\s*(\d+)")
 POLL_SECONDS = 3
 MAX_WAIT = 590  # stays inside Claude Code's default 600s hook timeout
+UNCLAIMED = "(delivery IS NULL OR (delivery NOT LIKE 'pushed%' AND delivery != 'pushing'))"
 
 
 def claim_answers(conn, session: str) -> list[dict]:
     """Answers for this session nobody has delivered yet, claimed atomically."""
     rows = conn.execute(
         "SELECT * FROM questions WHERE session_id=? AND status='answered' "
-        "AND (delivery IS NULL OR delivery NOT LIKE 'pushed%')", (session,)).fetchall()
+        f"AND {UNCLAIMED}", (session,)).fetchall()
     claimed = []
     for r in rows:
         cur = conn.execute(
             "UPDATE questions SET delivery='pushed via claude hook', delivered_at=?, updated_at=? "
-            "WHERE id=? AND (delivery IS NULL OR delivery NOT LIKE 'pushed%')", (now(), now(), r["id"]))
+            f"WHERE id=? AND {UNCLAIMED}", (now(), now(), r["id"]))
         if cur.rowcount:
             claimed.append(row_dict(r))
     return claimed
 
 
 def post_tool_use(data: dict) -> None:
-    cmd = str((data.get("tool_input") or {}).get("command", ""))
-    if data.get("tool_name") != "Bash" or not ASK_RE.search(cmd):
+    session = data.get("session_id")
+    if not session:
         return
-    m = ID_RE.search(json.dumps(data.get("tool_response")).replace('\\"', '"'))
-    if m:
-        qid = int(m.group(1) or m.group(2))
-        connect().execute("UPDATE questions SET session_id=? WHERE id=? AND session_id IS NULL",
-                          (data.get("session_id"), qid))
+    conn = connect()
+    cmd = str((data.get("tool_input") or {}).get("command", ""))
+    if data.get("tool_name") == "Bash" and ASK_RE.search(cmd):
+        m = ID_RE.search(json.dumps(data.get("tool_response")).replace('\\"', '"'))
+        if m:
+            conn.execute("UPDATE questions SET session_id=? WHERE id=? AND session_id IS NULL",
+                         (session, int(m.group(1) or m.group(2))))
+    got = claim_answers(conn, session)
+    if got:
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": "\n\n".join(answer_prompt(q) for q in got)}}))
 
 
 def stop(data: dict) -> None:

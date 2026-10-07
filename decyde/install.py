@@ -29,7 +29,7 @@ AGENT_FILES = (  # (label, config dir, instruction file). Only agents whose dir 
     ("Gemini CLI / Antigravity", HOMEDIR / ".gemini", "GEMINI.md"),
 )
 HOOKS = (  # (event, matcher, subcommand, timeout seconds)
-    ("PostToolUse", "Bash", "post-tool-use", 10),
+    ("PostToolUse", None, "post-tool-use", 10),  # every tool, so answers arrive mid-turn
     ("Stop", None, "stop", 600),
     ("UserPromptSubmit", None, "prompt", 10),
 )
