@@ -126,7 +126,8 @@ class Header:
         self.stars = []
         self.size = None
 
-    def draw(self, scr, colors, info: list[tuple[str, int]]) -> None:
+    def draw(self, scr, colors, text_put, info: list[tuple[str, int]]) -> None:
+        """`text_put(y, x, text, attr)` draws the info lines (the TUI's put, so they can be copied)."""
         h, w = scr.getmaxyx()
         t = time.time() - self.start
         info_x = HEADER_LEFT + LOGO_W + 4
@@ -141,4 +142,4 @@ class Header:
         glint = phase * (LOGO_W + 20) / 1.4 - 10 if phase < 1.4 else None
         draw_logo(scr, HEADER_TOP, HEADER_LEFT, colors, glint=glint)
         for i, (text, attr) in enumerate(info):
-            put(scr, HEADER_TOP + i, info_x, text[:max(0, w - info_x - 1)], attr)
+            text_put(HEADER_TOP + i, info_x, text[:max(0, w - info_x - 1)], attr)

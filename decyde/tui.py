@@ -1,7 +1,9 @@
 """Terminal UI: keyboard and mouse, purple/teal/grey."""
 from __future__ import annotations
 
+import base64
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -23,7 +25,8 @@ def tui(show_splash: bool = True) -> None:
              ("all", "history", ("open", "answered", "acknowledged", "cancelled")))
     # The system ncurses on macOS cannot report wheel-down, so read SGR mouse
     # sequences (xterm 1000 + 1006) ourselves instead of using curses.getmouse.
-    MOUSE_ON, MOUSE_OFF = "\x1b[?1000h\x1b[?1006h", "\x1b[?1006l\x1b[?1000l"
+    # 1002 adds motion-while-pressed, which drag-to-copy needs.
+    MOUSE_ON, MOUSE_OFF = "\x1b[?1000h\x1b[?1002h\x1b[?1006h", "\x1b[?1006l\x1b[?1002l\x1b[?1000l"
     ESC_KEYS = {"[A": "up", "OA": "up", "[B": "down", "OB": "down", "[5~": "pgup", "[6~": "pgdn",
                 "[H": "home", "OH": "home", "[F": "end", "OF": "end", "[Z": "backtab"}
 
@@ -47,7 +50,7 @@ def tui(show_splash: bool = True) -> None:
             C[name] = curses.color_pair(i)
         for i, (name, fg, bg, fb_fg, fb_bg) in enumerate((
                 ("tabsel", 16, 141, 0, 5), ("btn", 252, 237, 7, 0), ("btnhot", 16, 80, 0, 6),
-                ("rowsel", 255, 236, 7, 0)), start=30):
+                ("rowsel", 255, 236, 7, 0), ("selhl", 16, 141, 0, 5)), start=30):
             curses.init_pair(i, fg if rich else fb_fg, bg if rich else fb_bg)
             C[name] = curses.color_pair(i)
         C.update(dim=C["grey2"], faint=C["grey1"], text=C["grey4"], accent=C["purple3"], ok=C["teal3"],
@@ -58,7 +61,8 @@ def tui(show_splash: bool = True) -> None:
 
         conn = connect()
         st = {"view": 0, "sel": 0, "scroll": 0, "dscroll": 0, "dsel": None, "flash": "",
-              "marker": None, "seen": None, "rows": [], "hits": [], "list": (0, 0), "detail": (0, 0)}
+              "marker": None, "seen": None, "rows": [], "hits": [], "list": (0, 0), "detail": (0, 0),
+              "grid": [], "press": None, "selection": None}
 
         # ---- input
 
@@ -94,9 +98,11 @@ def tui(show_splash: bool = True) -> None:
                     except ValueError:
                         return None
                     if seq[-1] == "m":
-                        return None  # button release
+                        return ("release", x - 1, y - 1)
                     if b & 64:
                         return ("wheel", 1 if b & 1 else -1, x - 1, y - 1)
+                    if b & 32 and b & 3 == 0:
+                        return ("drag", x - 1, y - 1)
                     if b & ~28 == 0:
                         return ("click", x - 1, y - 1)
                     return None
@@ -122,6 +128,11 @@ def tui(show_splash: bool = True) -> None:
             if y < 0 or y >= h or x >= W:
                 return
             w = W - x if w is None else min(w, W - x)
+            row = st["grid"][y] if y < len(st["grid"]) else None
+            if row is not None:
+                for i, ch in enumerate(text[:max(0, w)]):
+                    if x + i < len(row):
+                        row[x + i] = ch
             try:
                 scr.addnstr(y, x, text, max(0, w), attr)
             except curses.error:
@@ -195,13 +206,14 @@ def tui(show_splash: bool = True) -> None:
             scr.erase()
             st["hits"] = []
             h, W = scr.getmaxyx()
+            st["grid"] = [[" "] * W for _ in range(h)]
             opn = [q for q in st["rows"] if q["status"] == "open"]
             prompt = f"{human_name().lower()}@{socket.gethostname().split('.')[0]}"
             stats = f"open {len(opn)}  ·  blocking {sum(q['urgency'] == 'high' for q in opn)}  ·  " \
                     f"awaiting ack {sum(q['status'] == 'answered' for q in st['rows'])}"
             stat_attr = C["purple4"] | curses.A_BOLD if opn else C["dim"]
             if splash.big_header_fits(h, W):
-                header.draw(scr, C, [(prompt, C["dim"]), (splash.TAGLINE, C["teal2"]), ("", 0),
+                header.draw(scr, C, put, [(prompt, C["dim"]), (splash.TAGLINE, C["teal2"]), ("", 0),
                                      (stats, stat_attr), (f"http://127.0.0.1:{PORT}", C["faint"])])
                 tabs_y = splash.HEADER_ROWS
             else:
@@ -278,9 +290,40 @@ def tui(show_splash: bool = True) -> None:
                 x = button(h - 2, x, "▲ prev", ("move", -1))
                 x = button(h - 2, x, "▼ next", ("move", 1))
                 button(h - 2, max(x, W - 9), "quit", ("quit",))
-                hint = "click or ↑↓ to browse · wheel scrolls · a answer · e editor · o option · d dismiss · tab view"
+                hint = "click or ↑↓ to browse · wheel scrolls · drag to copy · a answer · e editor · o option · d dismiss"
                 put(h - 1, 1, st["flash"] or hint, C["teal3"] if st["flash"] else C["faint"], W - 2)
+            for y, x0, x1 in selection_spans():
+                try:
+                    scr.chgat(y, x0, x1 - x0 + 1, C["selhl"])
+                except curses.error:
+                    pass
             scr.refresh()
+
+        # ---- drag to copy (mouse reporting takes over the terminal's own selection)
+
+        def selection_spans():
+            if not st["selection"]:
+                return []
+            (ay, ax), (by, bx) = sorted(st["selection"])
+            h, W = scr.getmaxyx()
+            return [(y, ax if y == ay else 0, bx if y == by else W - 1)
+                    for y in range(max(0, ay), min(h, by + 1))]
+
+        def selected_text():
+            lines = ["".join(st["grid"][y][x0:x1 + 1]).rstrip() for y, x0, x1 in selection_spans()
+                     if y < len(st["grid"])]
+            if len(lines) > 1:  # the first line starts where the drag did; drop the pane margin from the rest
+                lines = [lines[0].lstrip()] + textwrap.dedent("\n".join(lines[1:])).split("\n")
+            return "\n".join(lines).strip()
+
+        def copy_text(text):
+            for cmd in (["pbcopy"], ["wl-copy"], ["xclip", "-selection", "clipboard"]):
+                if shutil.which(cmd[0]):
+                    subprocess.run(cmd, input=text.encode(), check=False)
+                    return
+            # No clipboard tool (e.g. over SSH): ask the terminal itself via OSC 52.
+            sys.stdout.write("\x1b]52;c;" + base64.b64encode(text.encode()).decode() + "\x07")
+            sys.stdout.flush()
 
         # ---- prompts
 
@@ -422,9 +465,21 @@ def tui(show_splash: bool = True) -> None:
             if not (ev[0] == "key" and ev[1] == "resize"):
                 st["flash"] = ""
             if ev[0] == "click":
-                action = hit_at(ev[1], ev[2])
-                if action and not act(action):
-                    return
+                st["press"], st["selection"] = (ev[2], ev[1]), None
+            elif ev[0] == "drag" and st["press"]:
+                st["selection"] = (st["press"], (ev[2], ev[1]))
+            elif ev[0] == "release":
+                press, st["press"] = st["press"], None
+                if st["selection"] and st["selection"][0] != st["selection"][1]:
+                    text = selected_text()
+                    if text:
+                        copy_text(text)
+                        st["flash"] = f"copied {len(text)} characters"
+                elif press:
+                    st["selection"] = None
+                    action = hit_at(press[1], press[0])
+                    if action and not act(action):
+                        return
             elif ev[0] == "wheel":
                 _, d, _, y = ev
                 if st["list"][0] <= y < st["list"][1]:

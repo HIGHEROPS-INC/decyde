@@ -35,7 +35,9 @@ Skip any part with `--no-service`, `--no-agents` or `--no-hooks`.
 - **Browser:** http://127.0.0.1:7717 (or `decyde open`). Live updates, a chime
   and a desktop notification when a question arrives.
 - **Terminal:** `decyde`. Mouse and keyboard; scroll through questions, click an
-  option to answer with it, skip the ones you are not ready for.
+  option to answer with it, skip the ones you are not ready for. Drag across any
+  text to copy it (decyde does its own selection, since mouse mode takes over the
+  terminal's).
 
 ## How answers reach the agent
 
