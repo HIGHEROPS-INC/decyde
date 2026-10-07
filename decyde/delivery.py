@@ -87,16 +87,19 @@ def push_tmux(q: dict) -> str:
 
 # ---------------------------------------------------------------- dispatch
 
+HOOK_QUEUED = "queued: arrives at the agent's next tool call or message"
+
+
 def try_push(q: dict) -> str:
-    if q.get("herdr_pane"):
-        state = push_herdr(q)
-        if not state.startswith("skipped") or not q.get("tmux_pane"):
-            return state
-    if q.get("tmux_pane"):
-        return push_tmux(q)
+    state = None
+    for pane, push in (("herdr_pane", push_herdr), ("tmux_pane", push_tmux)):
+        if q.get(pane):
+            state = push(q)
+            if not state.startswith("skipped"):
+                return state
     if q.get("session_id"):
-        return "pending"  # the Claude Code hook delivers it on the agent's next stop or prompt
-    return "skipped: no push route (agent polls)"
+        return HOOK_QUEUED  # a Claude Code hook hands it over; nothing to retry here
+    return state or "skipped: no push route (agent polls)"
 
 
 def deliver(conn, qid: int) -> None:
