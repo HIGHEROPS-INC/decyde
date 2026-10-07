@@ -46,10 +46,10 @@ def post_tool_use(data: dict) -> None:
     conn = connect()
     cmd = str((data.get("tool_input") or {}).get("command", ""))
     if data.get("tool_name") == "Bash" and ASK_RE.search(cmd):
-        m = ID_RE.search(json.dumps(data.get("tool_response")).replace('\\"', '"'))
-        if m:
+        output = json.dumps(data.get("tool_response")).replace('\\"', '"')
+        for a, b in ID_RE.findall(output):  # one command may ask several questions
             conn.execute("UPDATE questions SET session_id=? WHERE id=? AND session_id IS NULL",
-                         (session, int(m.group(1) or m.group(2))))
+                         (session, int(a or b)))
     got = claim_answers(conn, session)
     if got:
         print(json.dumps({"hookSpecificOutput": {
