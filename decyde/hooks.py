@@ -3,8 +3,9 @@
 Claude Code cannot be woken once idle, so:
   post-tool-use  remembers which session ran `decyde ask`, and hands a working Claude
                  any new answer at its next tool call (as typed messages arrive mid-turn)
-  stop           when that session tries to stop with an open question, waits for
-                 the answer (default 10 min) and hands it back so Claude continues
+  stop           when that session tries to stop with an open question, keeps it waiting
+                 until the answer comes (default up to 24h) and hands it back so Claude
+                 continues; Esc interrupts the wait
   prompt         injects any late answer into the next message the human sends
 """
 from __future__ import annotations
@@ -15,12 +16,11 @@ import sys
 import time
 
 from decyde.delivery import answer_prompt
-from decyde.store import connect, load_config, now, row_dict
+from decyde.store import connect, now, row_dict, stop_wait_minutes
 
 ASK_RE = re.compile(r"\b(decyde|dhub)\s+ask\b")
 ID_RE = re.compile(r"question #(\d+)|\"id\":\s*(\d+)")
 POLL_SECONDS = 3
-MAX_WAIT = 590  # stays inside Claude Code's default 600s hook timeout
 UNCLAIMED = "(delivery IS NULL OR (delivery NOT LIKE 'pushed%' AND delivery != 'pushing'))"
 
 
@@ -62,7 +62,7 @@ def stop(data: dict) -> None:
     if not session:
         return
     conn = connect()
-    wait = min(MAX_WAIT, int(load_config().get("claude_stop_wait_minutes", 10)) * 60)
+    wait = stop_wait_minutes() * 60
     deadline = time.time() + wait
     while True:
         got = claim_answers(conn, session)

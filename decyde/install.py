@@ -12,7 +12,8 @@ import urllib.request
 from pathlib import Path
 
 from decyde import protocol
-from decyde.store import CONFIG_PATH, DB_PATH, HOME, PORT, connect, default_name, load_config, save_config
+from decyde.store import (CONFIG_PATH, DB_PATH, HOME, PORT, connect, default_name, load_config, save_config,
+                          stop_wait_minutes)
 
 HOMEDIR = Path.home()
 PKG_ROOT = Path(__file__).resolve().parent.parent
@@ -28,9 +29,9 @@ AGENT_FILES = (  # (label, config dir, instruction file). Only agents whose dir 
     ("Grok", HOMEDIR / ".grok", "AGENTS.md"),
     ("Gemini CLI / Antigravity", HOMEDIR / ".gemini", "GEMINI.md"),
 )
-HOOKS = (  # (event, matcher, subcommand, timeout seconds)
+HOOKS = (  # (event, matcher, subcommand, timeout seconds; None = follow the stop-wait setting)
     ("PostToolUse", None, "post-tool-use", 10),  # every tool, so answers arrive mid-turn
-    ("Stop", None, "stop", 600),
+    ("Stop", None, "stop", None),
     ("UserPromptSubmit", None, "prompt", 10),
 )
 LEGACY_DB = HOMEDIR / ".decision-hub" / "hub.db"
@@ -166,7 +167,7 @@ def edit_claude_settings(install: bool) -> None:
         entries = [e for e in hooks.get(event, []) if not is_ours(e)]
         if install:
             entry = {"hooks": [{"type": "command", "command": f"{shlex.quote(cmd_path())} hook {sub}",
-                                "timeout": timeout}]}
+                                "timeout": timeout or stop_wait_minutes() * 60 + 60}]}
             if matcher:
                 entry = {"matcher": matcher, **entry}
             entries.append(entry)

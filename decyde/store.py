@@ -108,6 +108,11 @@ def save_config(cfg: dict) -> None:
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2) + "\n")
 
 
+def stop_wait_minutes() -> int:
+    """How long a Claude Code session waits at the end of its turn for an open question."""
+    return int(load_config().get("claude_stop_wait_minutes", 24 * 60))
+
+
 def human_name() -> str:
     """The person agents are asking. Used in answer prompts and the UI."""
     return load_config().get("name") or default_name()

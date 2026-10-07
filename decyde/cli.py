@@ -170,6 +170,9 @@ def cmd_config(args) -> int:
     print(f"{args.key} = {cfg[args.key]}")
     if args.key == "name":
         print("Run `decyde setup` to update the name in your agents' instructions.")
+    if args.key == "claude_stop_wait_minutes":
+        from decyde import install
+        install.edit_claude_settings(install=True)  # the Stop hook's timeout follows this setting
     return 0
 
 
