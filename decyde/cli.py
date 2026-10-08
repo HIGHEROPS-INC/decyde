@@ -42,6 +42,64 @@ def print_q(q: dict, as_json: bool) -> None:
               f"and check again later with `decyde check {q['id']}`.")
 
 
+# ---------------------------------------------------------------- finding the asker's pane
+
+AGENT_KINDS = {"antigravity": ("antigravity", "agy"), "gemini": ("gemini",)}  # decyde name -> process/agent ids
+
+
+def kinds(agent: str) -> tuple[str, ...]:
+    return AGENT_KINDS.get(agent, (agent,))
+
+
+def under(path: str | None, cwd: str) -> bool:
+    return bool(path) and (cwd == path or cwd.startswith(path.rstrip("/") + "/"))
+
+
+def pick(candidates: list[dict]) -> dict | None:
+    """The asker, only when it is certain. Several panes may run the same agent in the same
+    folder; the asker is busy running `decyde ask`, so prefer the one that is working.
+    Anything still ambiguous returns None: a wrong guess would type the answer into
+    another agent, which is worse than falling back to polling."""
+    if len(candidates) == 1:
+        return candidates[0]
+    working = [c for c in candidates if c.get("working")]
+    return working[0] if len(working) == 1 else None
+
+
+def find_herdr_pane(agent: str, cwd: str) -> str | None:
+    try:
+        out = subprocess.run(["herdr", "agent", "list"], capture_output=True, text=True, timeout=5)
+        agents = json.loads(out.stdout)["result"]["agents"]
+    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError, KeyError, TypeError):
+        return None
+    found = []
+    for a in agents:
+        paths = [p for p in (a.get("foreground_cwd"), a.get("cwd")) if under(p, cwd)]
+        if a.get("agent") in kinds(agent) and paths:
+            found.append({"pane": a["pane_id"], "working": a.get("agent_status") == "working",
+                          "depth": max(len(p) for p in paths)})
+    # An agent in ~/proj/app is a better match for ~/proj/app than one in ~/proj.
+    deepest = max((f["depth"] for f in found), default=0)
+    hit = pick([f for f in found if f["depth"] == deepest])
+    return hit["pane"] if hit else None
+
+
+def find_tmux_pane(agent: str, cwd: str) -> tuple[str | None, str | None]:
+    """tmux cannot say whether an agent is working, so only a single match counts."""
+    try:
+        out = subprocess.run(["tmux", "list-panes", "-a", "-F",
+                              "#{pane_id}\t#{socket_path}\t#{pane_current_command}\t#{pane_current_path}"],
+                             capture_output=True, text=True, timeout=5)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None, None
+    found = []
+    for line in out.stdout.splitlines():
+        pane, sock, cmd, path = (line.split("\t") + ["", "", "", ""])[:4]
+        if cmd.lower() in kinds(agent) and under(path, cwd):
+            found.append((pane, sock))
+    return found[0] if len(found) == 1 else (None, None)
+
+
 # ---------------------------------------------------------------- agent commands
 
 def cmd_ask(args) -> int:
@@ -53,6 +111,13 @@ def cmd_ask(args) -> int:
     env = os.environ
     herdr = env.get("HERDR_PANE_ID") if env.get("HERDR_ENV") == "1" else None
     tmux_socket = env["TMUX"].split(",")[0] if env.get("TMUX") else None
+    tmux_pane = env.get("TMUX_PANE") if tmux_socket else None
+    if not herdr and not tmux_pane:
+        # Some agents (Codex since 0.161) run commands from a shared background server
+        # started outside the multiplexer, so the pane variables are missing. Ask instead.
+        herdr = find_herdr_pane(agent, cwd)
+        if not herdr:
+            tmux_pane, tmux_socket = find_tmux_pane(agent, cwd)
     ts = now()
     conn = connect()
     cur = conn.execute(
@@ -60,7 +125,7 @@ def cmd_ask(args) -> int:
         "herdr_pane, tmux_pane, tmux_socket, title, question, context, options, recommendation, urgency) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (ts, ts, agent, args.name, args.task, args.project or Path(cwd).name.strip(), cwd, git_branch(cwd),
-         herdr, env.get("TMUX_PANE") if tmux_socket else None, tmux_socket, args.title, args.question,
+         herdr, tmux_pane, tmux_socket, args.title, args.question,
          args.context, json.dumps(args.option) if args.option else None, args.recommend, args.urgency),
     )
     qid = cur.lastrowid
