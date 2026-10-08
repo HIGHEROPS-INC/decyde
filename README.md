@@ -12,7 +12,7 @@ that asked.
 curl -fsSL https://decyde.dev/install | sh
 ```
 
-Requires Python 3.10+ (standard library only, nothing else to install) on
+Requires Python 3.11+ (standard library only, nothing else to install) on
 macOS or Linux. Run the same command again to upgrade.
 
 ## What setup does
@@ -27,8 +27,12 @@ macOS or Linux. Run the same command again to upgrade.
   `<!-- decyde:begin -->` markers: `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
   `~/.grok/AGENTS.md`, `~/.gemini/GEMINI.md`.
 - Adds three Claude Code hooks to `~/.claude/settings.json` (backed up first).
+- If [Herdr](https://herdr.dev) is installed, adds a sidebar row to
+  `~/.config/herdr/config.toml` (between `# >>> decyde` markers) so agents
+  waiting on you are marked there. If you already customise the sidebar rows,
+  setup leaves them alone and prints the one token to add.
 
-Skip any part with `--no-service`, `--no-agents` or `--no-hooks`.
+Skip any part with `--no-service`, `--no-agents`, `--no-hooks` or `--no-herdr`.
 
 ## Answering
 
@@ -38,6 +42,13 @@ Skip any part with `--no-service`, `--no-agents` or `--no-hooks`.
   option to answer with it, skip the ones you are not ready for. Drag across any
   text to copy it (decyde does its own selection, since mouse mode takes over the
   terminal's).
+
+## Herdr sidebar
+
+While an agent has an open question, its row in Herdr's sidebar shows it in
+purple (`? #12 Keep webhooks in Edge?`) and its Space shows a count
+(`? 2 waiting on you`). Marks clear as soon as you answer, and expire on their
+own if the decyde server stops.
 
 ## How answers reach the agent
 

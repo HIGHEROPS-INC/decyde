@@ -11,7 +11,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from decyde import protocol
+from decyde import herdr_sidebar, protocol
 from decyde.store import (CONFIG_PATH, DB_PATH, HOME, PORT, connect, default_name, load_config, save_config,
                           stop_wait_minutes)
 
@@ -213,6 +213,8 @@ def setup(args) -> int:
         configure_agents(name)
     if not args.no_hooks:
         edit_claude_settings(install=True)
+    if not args.no_herdr and (msg := herdr_sidebar.install_rows()):
+        say(msg)
     print(f"\nDone. Open http://127.0.0.1:{PORT} or run `decyde` for the terminal UI.")
     return 0
 
@@ -222,6 +224,8 @@ def uninstall(args) -> int:
     remove_service()
     unconfigure_agents()
     edit_claude_settings(install=False)
+    if msg := herdr_sidebar.remove_rows():
+        say(msg)
     if LINK.is_symlink():
         LINK.unlink()
         say(f"removed {LINK}")

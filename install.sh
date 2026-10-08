@@ -14,8 +14,8 @@ die() { printf '\033[31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 command -v curl >/dev/null || die "curl is required"
 command -v tar >/dev/null || die "tar is required"
 PY="$(command -v python3 || true)"
-[ -n "$PY" ] || die "python3 (3.10 or newer) is required"
-"$PY" -c 'import sys; sys.exit(sys.version_info < (3, 10))' || die "python3 is $("$PY" -V 2>&1 | cut -d' ' -f2); decyde needs 3.10 or newer"
+[ -n "$PY" ] || die "python3 (3.11 or newer) is required"
+"$PY" -c 'import sys; sys.exit(sys.version_info < (3, 11))' || die "python3 is $("$PY" -V 2>&1 | cut -d' ' -f2); decyde needs 3.11 or newer"
 
 say "downloading $REPO@$REF"
 TMP="$(mktemp -d)"

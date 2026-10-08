@@ -239,6 +239,7 @@ def build_parser() -> argparse.ArgumentParser:
     su.add_argument("--no-service", action="store_true")
     su.add_argument("--no-agents", action="store_true", help="leave agent instruction files alone")
     su.add_argument("--no-hooks", action="store_true", help="leave Claude Code settings alone")
+    su.add_argument("--no-herdr", action="store_true", help="leave Herdr's sidebar config alone")
     su.set_defaults(fn=install.setup)
     un = sub.add_parser("uninstall", help="undo setup")
     un.add_argument("--purge", action="store_true", help="also delete the database")

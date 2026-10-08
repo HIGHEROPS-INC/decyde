@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 from decyde import __version__
 from decyde.delivery import delivery_loop, dismiss_question, notify_new, record_answer
+from decyde.herdr_sidebar import REFRESH_SECONDS, Sidebar
 from decyde.store import DB_PATH, change_marker, connect, get_question, human_name, row_dict
 
 INDEX_HTML = Path(__file__).resolve().parent / "web" / "index.html"
@@ -33,10 +34,15 @@ class Hub:
         conn = connect()
         marker = change_marker(conn)
         last_id = conn.execute("SELECT COALESCE(MAX(id), 0) FROM questions").fetchone()[0]
+        sidebar = Sidebar()
+        sidebar.sync(conn, time.time())
         while not stop.wait(1):
             m = change_marker(conn)
             if m == marker:
+                if time.time() - sidebar.last_full >= REFRESH_SECONDS:
+                    sidebar.sync(conn, time.time())  # renew the TTL on marks still showing
                 continue
+            sidebar.sync(conn, time.time())
             marker = m
             for r in conn.execute("SELECT * FROM questions WHERE id > ? ORDER BY id", (last_id,)):
                 q = row_dict(r)
