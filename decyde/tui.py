@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from decyde import splash, update
+from decyde import __version__, splash, update
 from decyde.delivery import dismiss_question, record_answer
 from decyde.store import PORT, change_marker, connect, get_question, human_name, load_config, row_dict
 
@@ -214,14 +214,20 @@ def tui(show_splash: bool = True) -> None:
             stat_attr = C["purple4"] | curses.A_BOLD if opn else C["dim"]
             if splash.big_header_fits(h, W):
                 newer = update.available()
-                header.draw(scr, C, put, [(prompt, C["dim"]), (splash.TAGLINE, C["teal2"]), ("", 0),
-                                     (stats, stat_attr), (f"http://127.0.0.1:{PORT}", C["faint"]),
-                                     (f"decyde {newer} is available: run `decyde update`" if newer else "",
-                                      C["purple4"] | curses.A_BOLD)])
+                header.draw(scr, C, put, [
+                    (prompt, C["dim"]),
+                    (splash.TAGLINE, C["teal2"]),
+                    (f"decyde {newer} is available: run `decyde update`" if newer else "",
+                     C["purple4"] | curses.A_BOLD),
+                    (stats, stat_attr),
+                    (f"http://127.0.0.1:{PORT} · v{__version__}", C["faint"]),
+                    ("by HigherOps", C["purple2"]),  # sits on the logo's last row, a small sign-off
+                ])
                 tabs_y = splash.HEADER_ROWS
             else:
                 put(0, 1, prompt + ":~$ ", C["dim"])
                 put(0, 1 + len(prompt) + 4, "decyde", C["purple3"] | curses.A_BOLD)
+                put(0, 1 + len(prompt) + 11, f"v{__version__}", C["faint"])
                 put(0, max(30, W - len(stats) - 2), stats, stat_attr)
                 tabs_y = 1
             x = 1

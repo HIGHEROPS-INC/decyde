@@ -4,6 +4,12 @@ All notable changes to decyde. Versions follow [semantic versioning](https://sem
 each one is a [GitHub release](https://github.com/HIGHEROPS-INC/decyde/releases), and the
 installer and `decyde update` install the latest release.
 
+## [0.4.3] - 2026-10-09
+
+### Changed
+- The terminal UI header shows the version beside the server address and a purple
+  "by HigherOps" under it. Update notices move up to the free row so the two never clash.
+
 ## [0.4.2] - 2026-10-09
 
 ### Fixed
@@ -110,6 +116,7 @@ installer and `decyde update` install the latest release.
   instructions for Claude Code, Codex, Grok and Gemini/Antigravity, and Claude Code hooks.
 - The curl installer at https://decyde.dev/install.
 
+[0.4.3]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.3
 [0.4.2]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.2
 [0.4.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.1
 [0.4.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.0
