@@ -4,6 +4,13 @@ All notable changes to decyde. Versions follow [semantic versioning](https://sem
 each one is a [GitHub release](https://github.com/HIGHEROPS-INC/decyde/releases), and the
 installer and `decyde update` install the latest release.
 
+## [0.4.1] - 2026-10-09
+
+### Fixed
+- Answers given in the terminal UI are delivered by the background server, not by the
+  TUI process. A TUI left open across an upgrade used to deliver with its old code and
+  miss newer wake routes.
+
 ## [0.4.0] - 2026-10-09
 
 ### Added
@@ -93,6 +100,7 @@ installer and `decyde update` install the latest release.
   instructions for Claude Code, Codex, Grok and Gemini/Antigravity, and Claude Code hooks.
 - The curl installer at https://decyde.dev/install.
 
+[0.4.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.1
 [0.4.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.0
 [0.3.2]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.3.2
 [0.3.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.3.1

@@ -192,12 +192,17 @@ def delivery_loop(stop: threading.Event) -> None:
                     print(f"delivery #{r['id']} failed: {e}", file=sys.stderr, flush=True)
 
 
-def record_answer(conn, qid: int, text: str, background: bool = True) -> None:
+def record_answer(conn, qid: int, text: str, background: bool = True, deliver_now: bool = True) -> None:
+    """Save the answer and push it. The TUI passes deliver_now=False and leaves the push to
+    the server, which is restarted on every upgrade, so a long-open TUI never delivers
+    with stale code."""
     conn.execute(
         "UPDATE questions SET status='answered', answer=?, answered_at=?, updated_at=?, "
         "delivery='pending', delivered_at=NULL, acknowledged_at=NULL WHERE id=?",
         (text, now(), now(), qid),
     )
+    if not deliver_now:
+        return
     if background:
         threading.Thread(target=lambda: deliver(connect(), qid), daemon=True).start()
     else:

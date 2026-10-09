@@ -409,10 +409,8 @@ def tui(show_splash: bool = True) -> None:
             if get_question(conn, q["id"])["status"] == "cancelled":
                 st["flash"] = f"#{q['id']} was withdrawn by the agent"
                 return
-            st["flash"] = f"answering #{q['id']}, pushing to agent..."
-            draw()
-            record_answer(conn, q["id"], text, background=False)
-            st["flash"] = f"answered #{q['id']} · delivery: {get_question(conn, q['id'])['delivery']}"
+            record_answer(conn, q["id"], text, deliver_now=False)
+            st["flash"] = f"answered #{q['id']} · decyde is delivering it to the agent"
 
         # ---- actions
 

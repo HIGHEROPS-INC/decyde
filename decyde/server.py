@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from decyde import __version__
-from decyde.delivery import delivery_loop, dismiss_question, notify_new, record_answer
+from decyde.delivery import deliver, delivery_loop, dismiss_question, notify_new, record_answer
 from decyde import update
 from decyde.herdr_sidebar import REFRESH_SECONDS, Sidebar
 from decyde.store import DB_PATH, change_marker, connect, get_question, human_name, row_dict
@@ -51,6 +51,9 @@ class Hub:
                 if q["status"] == "open":
                     notify_new(q)
             self.broadcast("changed")
+            # Answers saved elsewhere (the TUI) are pushed from here, within a second.
+            for r in conn.execute("SELECT id FROM questions WHERE status='answered' AND delivery='pending'"):
+                threading.Thread(target=lambda qid=r["id"]: deliver(connect(), qid), daemon=True).start()
 
 
 HUB = Hub()
