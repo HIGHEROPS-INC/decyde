@@ -122,10 +122,12 @@ def cmd_ask(args) -> int:
     conn = connect()
     cur = conn.execute(
         "INSERT INTO questions (created_at, updated_at, agent, agent_name, task, project, cwd, git_branch, "
-        "herdr_pane, tmux_pane, tmux_socket, session_id, title, question, context, options, recommendation, "
-        "urgency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "herdr_pane, tmux_pane, tmux_socket, session_id, inbox_socket, inbox_token, codex_thread, title, "
+        "question, context, options, recommendation, urgency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (ts, ts, agent, args.name, args.task, args.project or Path(cwd).name.strip(), cwd, git_branch(cwd),
-         herdr, tmux_pane, tmux_socket, env.get("GROK_SESSION_ID"), args.title, args.question,
+         herdr, tmux_pane, tmux_socket, env.get("GROK_SESSION_ID") or env.get("CODEX_THREAD_ID"),
+         env.get("CLAUDE_CODE_MESSAGING_SOCKET"), env.get("CLAUDE_CODE_MESSAGING_TOKEN"),
+         env.get("CODEX_THREAD_ID"), args.title, args.question,
          args.context, json.dumps(args.option) if args.option else None, args.recommend, args.urgency),
     )
     qid = cur.lastrowid
@@ -147,17 +149,27 @@ def cmd_check(args) -> int:
 
 
 def cmd_wait(args) -> int:
+    """Block until answered. Run in the background, it is also how an agent gets woken:
+    while it runs, decyde hands the answer to it instead of pushing it anywhere else."""
     conn = connect()
     deadline = time.time() + args.timeout
-    while True:
-        q = get_question(conn, args.id)
-        if not q:
-            print(f"No question #{args.id}", file=sys.stderr)
-            return 1
-        if q["status"] != "open" or time.time() >= deadline:
-            print_q(q, args.json)
-            return exit_code(q)
-        time.sleep(args.interval)
+    conn.execute("UPDATE questions SET waiter_pid=? WHERE id=?", (os.getpid(), args.id))
+    try:
+        while True:
+            q = get_question(conn, args.id)
+            if not q:
+                print(f"No question #{args.id}", file=sys.stderr)
+                return 1
+            if q["status"] != "open" or time.time() >= deadline:
+                if q["status"] == "answered":
+                    conn.execute("UPDATE questions SET delivery='pushed via decyde wait', delivered_at=?, "
+                                 "updated_at=? WHERE id=? AND (delivery IS NULL OR delivery NOT LIKE 'pushed%')",
+                                 (now(), now(), args.id))
+                print_q(q, args.json)
+                return exit_code(q)
+            time.sleep(args.interval)
+    finally:
+        conn.execute("UPDATE questions SET waiter_pid=NULL WHERE id=? AND waiter_pid=?", (args.id, os.getpid()))
 
 
 def cmd_ack(args) -> int:
@@ -277,7 +289,7 @@ def build_parser() -> argparse.ArgumentParser:
     w = sub.add_parser("wait", help="(agents) block until answered or timeout")
     w.add_argument("id", type=int)
     w.add_argument("--timeout", type=int, default=600, help="seconds (default 600)")
-    w.add_argument("--interval", type=int, default=15)
+    w.add_argument("--interval", type=int, default=3)
     w.add_argument("--json", action="store_true")
     w.set_defaults(fn=cmd_wait)
 

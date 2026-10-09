@@ -30,7 +30,11 @@ CREATE TABLE IF NOT EXISTS questions (
   herdr_pane      TEXT,                   -- where to push the answer, if asked inside Herdr
   tmux_pane       TEXT,                   -- ... or inside tmux
   tmux_socket     TEXT,
-  session_id      TEXT,                   -- Claude Code session, for hook delivery
+  session_id      TEXT,                   -- agent session, for hook delivery
+  inbox_socket    TEXT,                   -- Claude Code session inbox, to message it directly
+  inbox_token     TEXT,
+  codex_thread    TEXT,                   -- Codex thread, to start a turn through its app-server
+  waiter_pid      INTEGER,                -- a running `decyde wait` that will hand the answer over
   title           TEXT NOT NULL,
   question        TEXT NOT NULL,
   context         TEXT,
@@ -53,7 +57,8 @@ CREATE TABLE IF NOT EXISTS sessions (     -- agent sessions that turned decyde o
   nudged_at       TEXT                    -- last time the stop check sent the agent back
 );
 """
-LATE_COLUMNS = ("tmux_pane", "tmux_socket", "session_id")
+LATE_COLUMNS = ("tmux_pane", "tmux_socket", "session_id", "inbox_socket", "inbox_token", "codex_thread",
+                "waiter_pid")
 
 
 def now() -> str:
@@ -61,7 +66,7 @@ def now() -> str:
 
 
 def connect() -> sqlite3.Connection:
-    HOME.mkdir(parents=True, exist_ok=True)
+    HOME.mkdir(mode=0o700, parents=True, exist_ok=True)  # holds per-session inbox tokens
     conn = sqlite3.connect(DB_PATH, timeout=10, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -70,7 +75,7 @@ def connect() -> sqlite3.Connection:
     have = {r[1] for r in conn.execute("PRAGMA table_info(questions)")}
     for col in LATE_COLUMNS:
         if col not in have:
-            conn.execute(f"ALTER TABLE questions ADD COLUMN {col} TEXT")
+            conn.execute(f"ALTER TABLE questions ADD COLUMN {col} {'INTEGER' if col == 'waiter_pid' else 'TEXT'}")
     return conn
 
 

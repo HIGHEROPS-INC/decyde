@@ -184,12 +184,12 @@ def stop(data: dict) -> None:
     open_ids = [r["id"] for r in conn.execute(
         "SELECT id FROM questions WHERE session_id=? AND status='open'", (session,))]
     if not open_ids or has_push_route(conn, session):
-        # In Herdr or tmux the answer is typed into the pane whenever it comes, which wakes
-        # the agent. Holding the turn here would only make those typed answers queue up
-        # behind the hook, so let the agent stop.
+        # decyde can wake this session when the answer comes (pane, Claude inbox, Codex
+        # app-server, or a background `decyde wait`). Holding the turn here would only make
+        # the answer queue up behind the hook, so let the agent stop.
         return
-    # A plain terminal: nothing can wake an idle session, so hold the turn until any one
-    # answer arrives (not all of them), then hand it back so the agent continues.
+    # Nothing can wake this session (an older agent version, say), so hold the turn until
+    # any one answer arrives (not all of them), then hand it back so the agent continues.
     deadline = time.time() + stop_wait_minutes() * 60
     marks = ",".join("?" * len(open_ids))
     while time.time() < deadline:
@@ -204,9 +204,11 @@ def stop(data: dict) -> None:
 
 
 def has_push_route(conn, session: str) -> bool:
-    return bool(conn.execute(
-        "SELECT 1 FROM questions WHERE session_id=? AND (herdr_pane IS NOT NULL OR tmux_pane IS NOT NULL)",
-        (session,)).fetchone())
+    """Can decyde wake this session when an answer comes? Then the hook must not hold it."""
+    from decyde.delivery import waiter_alive
+    rows = conn.execute("SELECT * FROM questions WHERE session_id=? AND status='open'", (session,)).fetchall()
+    return any(r["herdr_pane"] or r["tmux_pane"] or r["inbox_socket"] or r["codex_thread"]
+               or waiter_alive(dict(r)) for r in rows)
 
 
 HANDLERS = {"post-tool-use": post_tool_use, "stop": stop, "prompt": prompt}

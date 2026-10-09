@@ -4,6 +4,27 @@ All notable changes to decyde. Versions follow [semantic versioning](https://sem
 each one is a [GitHub release](https://github.com/HIGHEROPS-INC/decyde/releases), and the
 installer and `decyde update` install the latest release.
 
+## [0.4.0] - 2026-10-09
+
+### Added
+- Answers wake agents in any terminal, not just Herdr or tmux:
+  - **Claude Code**: decyde messages the session that asked through its own inbox
+    socket (Claude Code 2.1.224+). An idle session starts a new turn; a busy one reads
+    the answer at its next step.
+  - **Codex**: decyde starts a turn in the asking thread through Codex's app-server
+    daemon (Codex 0.161+), or adds the answer to the turn already running. It shows in
+    the Codex terminal as if typed.
+  - **Grok** (and any agent that runs background commands): the agent starts
+    `decyde wait <id>` in the background after asking, and is woken when it returns with
+    the answer. While a `decyde wait` is running, decyde hands the answer to it instead
+    of pushing it anywhere else.
+
+### Changed
+- The Stop hook no longer holds any session decyde can wake, so answers never queue
+  behind it. It only holds a session with no wake route at all, until the first answer.
+- `decyde wait` polls every 3 seconds instead of 15.
+- `~/.decyde` is created private (0700), since it now holds per-session inbox tokens.
+
 ## [0.3.2] - 2026-10-09
 
 ### Fixed
@@ -72,6 +93,7 @@ installer and `decyde update` install the latest release.
   instructions for Claude Code, Codex, Grok and Gemini/Antigravity, and Claude Code hooks.
 - The curl installer at https://decyde.dev/install.
 
+[0.4.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.0
 [0.3.2]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.3.2
 [0.3.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.3.1
 [0.3.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.3.0

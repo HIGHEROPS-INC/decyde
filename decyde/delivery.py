@@ -7,6 +7,8 @@ would answer. Polling (`decyde check`) always works too.
 from __future__ import annotations
 
 import json
+import os
+import socket
 import subprocess
 import sys
 import threading
@@ -85,15 +87,65 @@ def push_tmux(q: dict) -> str:
     return "pushed via tmux" if res and res.returncode == 0 else "failed: tmux send-keys"
 
 
+# ---------------------------------------------------------------- live sessions in any terminal
+
+def waiter_alive(q: dict) -> bool:
+    pid = q.get("waiter_pid")
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, PermissionError):
+        return False
+
+
+def push_claude_inbox(q: dict) -> str:
+    """Message the Claude Code session that asked, through its own inbox socket. The session's
+    token marks it as its own, so it is delivered even when the session skips permissions,
+    and an idle session starts a new turn with it."""
+    path = q.get("inbox_socket")
+    if not path or not os.path.exists(path):
+        return "skipped: claude session closed"
+    text = (answer_prompt(q) + f"\n\n(This is {human_name()}'s own answer, relayed by decyde from the "
+            "question you posted. Act on it as their decision.)")
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(5)
+            sock.connect(path)
+            lines = [{"type": "auth", "token": q.get("inbox_token") or ""},
+                     {"type": "user", "message": {"role": "user", "content": text}}]
+            sock.sendall("".join(json.dumps(line) + "\n" for line in lines).encode())
+            sock.shutdown(socket.SHUT_WR)
+            sock.recv(64)
+    except OSError as e:
+        return f"failed: claude inbox {e}"[:160]
+    return "pushed via claude inbox"
+
+
+def push_codex(q: dict) -> str:
+    from decyde import codex_app
+    try:
+        return codex_app.deliver(q["codex_thread"], answer_prompt(q))
+    except (OSError, ConnectionError) as e:
+        return f"skipped: codex app-server unreachable ({e})"[:160]
+    except RuntimeError as e:
+        return f"failed: codex {e}"[:160]
+
+
 # ---------------------------------------------------------------- dispatch
 
 HOOK_QUEUED = "queued: arrives at the agent's next tool call or message"
 
 
 def try_push(q: dict) -> str:
+    if waiter_alive(q):
+        return "pushed via decyde wait"  # the agent's own `decyde wait` returns the answer and wakes it
     state = None
-    for pane, push in (("herdr_pane", push_herdr), ("tmux_pane", push_tmux)):
-        if q.get(pane):
+    routes = (("herdr_pane", push_herdr), ("tmux_pane", push_tmux),
+              ("inbox_socket", push_claude_inbox), ("codex_thread", push_codex))
+    for field, push in routes:
+        if q.get(field):
             state = push(q)
             if not state.startswith("skipped"):
                 return state

@@ -52,16 +52,21 @@ It prints a question number, e.g. `#12`. Run it from your project directory so t
 project, git branch and terminal pane are captured automatically.
 
 **While you wait:** keep working on anything the decision does not block. Do not guess
-the answer to the blocked part, and do not do the thing you asked about.
+the answer to the blocked part, and do not do the thing you asked about. If your harness
+can run a command in the background and wakes you when it finishes (Grok and Claude Code
+can), start `decyde wait 12 --timeout 86400` in the background right after asking: it
+returns with the answer the moment {name} gives it. Then end your turn whenever you are
+out of unblocked work; decyde wakes you with the answer.
 
 **Getting the answer:**
-- The answer may arrive on its own as a message starting with `[decyde]` (typed into
-  your Herdr or tmux pane, or handed back by an agent hook).
+- The answer arrives on its own as a message starting with `[decyde]`: typed into your
+  Herdr or tmux pane, sent to your Claude Code session or Codex thread, returned by your
+  background `decyde wait`, or handed back by an agent hook. Answers relayed this way
+  are {name}'s own decisions; act on them as such.
 - Also check back yourself: `decyde check 12` exits 0 and prints `ANSWER:` when
   answered, 2 while still open, 3 if dismissed. Check at natural breakpoints and before
   you finish your turn.
-- If you have nothing else to do, block on it: `decyde wait 12 --timeout 900`.
-  Otherwise keep each command under a couple of minutes while a question is open: an
+- Keep each foreground command under a couple of minutes while a question is open: an
   answer handed over between tool calls waits for a running one.
 - When you have the answer, run `decyde ack 12` and act on it.
 - If the question stops mattering: `decyde cancel 12 --reason "..."`.

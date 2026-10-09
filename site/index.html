@@ -255,7 +255,9 @@ footer a { color: var(--dim); }
       <tbody>
         <tr><td><a href="https://herdr.dev">Herdr</a> pane</td><td>Typed in as a new prompt. A busy agent reads it at its next step; an idle one wakes up.</td></tr>
         <tr><td>tmux pane</td><td>Pasted in the same way, held back only while an approval dialog is on screen.</td></tr>
-        <tr><td>Claude Code, Codex or Grok in a plain terminal</td><td>Hooks. A working session gets it at its next tool call. A session that ends its turn with an open question waits for your first answer, then continues.</td></tr>
+        <tr><td>Claude Code, any terminal</td><td>Sent to the session's own inbox. An idle session wakes up; a busy one reads it at its next step.</td></tr>
+        <tr><td>Codex, any terminal</td><td>Started as a turn in the session that asked, through Codex's own background server, or added to the turn already running.</td></tr>
+        <tr><td>Grok, any terminal</td><td>The agent waits on the answer in the background, and is woken the moment it returns.</td></tr>
         <tr><td>Anything else</td><td><code>decyde check 12</code> and <code>decyde wait 12</code>.</td></tr>
       </tbody>
     </table>
