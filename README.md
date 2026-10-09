@@ -104,9 +104,14 @@ The full protocol agents follow is in [`decyde/protocol.py`](decyde/protocol.py)
 |---|---|
 | `decyde` | Terminal UI (`--no-splash` skips the intro) |
 | `decyde open` | Web UI in your browser |
-| `decyde status` | What is installed and running |
-| `decyde config [key] [value]` | `name`, `claude_stop_wait_minutes`, `splash` |
+| `decyde status` | What is installed and running, and whether an update is out |
+| `decyde update` | Install the latest version and refresh agent instructions and hooks |
+| `decyde config [key] [value]` | `name`, `claude_stop_wait_minutes`, `splash`, `update_check` |
 | `decyde setup` / `decyde uninstall [--purge]` | Install or remove |
+
+Once a day the server reads the latest version number from this repo on GitHub so the
+UIs can tell you about updates. Nothing else is sent; turn it off with
+`decyde config update_check off`.
 
 Environment: `DECYDE_HOME` (default `~/.decyde`), `DECYDE_PORT` (default 7717).
 

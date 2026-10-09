@@ -216,7 +216,8 @@ def cmd_open(args) -> int:
     return 0
 
 
-CONFIG_KEYS = {"name": str, "claude_stop_wait_minutes": int, "splash": lambda v: v.lower() in ("1", "true", "on", "yes")}
+ON = lambda v: v.lower() in ("1", "true", "on", "yes")
+CONFIG_KEYS = {"name": str, "claude_stop_wait_minutes": int, "splash": ON, "update_check": ON}
 
 
 def cmd_config(args) -> int:
@@ -310,6 +311,10 @@ def build_parser() -> argparse.ArgumentParser:
     un.add_argument("--purge", action="store_true", help="also delete the database")
     un.set_defaults(fn=install.uninstall)
     sub.add_parser("status", help="show what is installed and running").set_defaults(fn=install.status)
+    from decyde import update
+    up = sub.add_parser("update", help="install the latest version and refresh agent setup")
+    up.add_argument("--force", action="store_true", help="reinstall even if already current")
+    up.set_defaults(fn=update.run_update)
 
     cf = sub.add_parser("config", help="show or change settings")
     cf.add_argument("key", nargs="?")

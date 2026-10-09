@@ -95,6 +95,16 @@ td:first-child { color: var(--bright); white-space: nowrap; }
 .agents { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 34px; padding: 0; list-style: none; }
 .agents li { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 6px 14px; color: var(--bright); font-size: 14px; }
 
+.toggle { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.toggle .term { border: 1px solid var(--line); border-radius: 10px; }
+.toggle p { margin: 0 0 12px; color: var(--dim); }
+.toggle p b { color: var(--bright); font-weight: 500; }
+.asks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 22px; }
+.ask { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--p2); border-radius: 10px; padding: 16px 18px; }
+.ask b { display: block; color: var(--p4); font-weight: 500; margin-bottom: 4px; }
+.ask span { color: var(--dim); font-size: 14px; }
+.notask { color: var(--dim); font-size: 14px; border: 1px dashed var(--line); border-radius: 10px; padding: 14px 18px; }
+.notask b { color: var(--text); font-weight: 500; }
 .facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .fact { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
 .fact b { display: block; color: var(--t3); font-weight: 500; margin-bottom: 4px; }
@@ -104,7 +114,7 @@ footer { border-top: 1px solid var(--line); padding: 34px 0 50px; color: var(--f
 footer a { color: var(--dim); }
 
 @media (max-width: 800px) {
-  .flow, .facts { grid-template-columns: 1fr; }
+  .flow, .facts, .toggle, .asks { grid-template-columns: 1fr; }
   nav .links .hide-sm { display: none; }
   .hero { padding: 40px 0 60px; }
   td:first-child { white-space: normal; }
@@ -120,6 +130,7 @@ footer a { color: var(--dim); }
     <div class="mark">decyde<span>.dev</span></div>
     <div class="links">
       <a href="#how" class="hide-sm">how it works</a>
+      <a href="#asks" class="hide-sm">asks</a>
       <a href="#delivery" class="hide-sm">delivery</a>
       <a href="https://github.com/HIGHEROPS-INC/decyde">github</a>
     </div>
@@ -139,7 +150,7 @@ footer a { color: var(--dim); }
 
   <section id="how">
     <h2>How it works</h2>
-    <p class="lede">You run five agents across three projects. One of them needs a call on pricing while you are in a meeting. Instead of the question scrolling away in a terminal you are not watching, it lands in decyde with who asked, what they are working on, the options and their recommendation. Turn it on for any session by telling the agent "use decyde".</p>
+    <p class="lede">You run five agents across three projects. One of them needs a call on pricing while you are in a meeting. Instead of the question scrolling away in a terminal you are not watching, it lands in decyde with who asked, what they are working on, the options and their recommendation. </p>
     <div class="flow">
       <div class="step">
         <div class="cap"><b>1</b>The agent asks and keeps working</div>
@@ -201,6 +212,40 @@ footer a { color: var(--dim); }
     </div>
   </section>
 
+  <section id="on">
+    <h2>Turning it on</h2>
+    <p class="lede">decyde is off in every agent session until you turn it on, so a quick hands-on session stays the way you are used to. Turn it on when you are about to walk away.</p>
+    <div class="toggle">
+<pre class="term"><span class="c-p">›</span> <span class="c-b">use decyde.</span> Finish the invoices migration
+  and open a PR.
+
+<span class="c-t">⏺</span> decyde is on for this session. Asks
+  will go to your inbox, not this chat.
+
+<span class="c-d">…</span>
+
+<span class="c-t">⏺</span> Migration and PR are ready. Waiting on
+  <span class="c-p">decyde #31</span>: Drop the old invoices table?</pre>
+      <div>
+        <p><b>Say "use decyde"</b> to any agent, or <code>decyde on</code>. Claude Code also takes <code>/decyde on</code>. Say "decyde off" to go back to asking in chat.</p>
+        <p><b>It sticks for the session.</b> Every ask from then on goes to your inbox, and the agent ends its turn by naming the question it is waiting on.</p>
+        <p><b>There is a safety net.</b> In Claude Code, Codex and Grok, if an agent ends its turn on something that reads like an ask without posting it, a hook sends it back once to post it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="asks">
+    <h2>What counts as an ask</h2>
+    <p class="lede">Anything that needs you before it happens. While decyde is on, these go to your inbox instead of the end of a chat message you might never scroll back to.</p>
+    <div class="asks">
+      <div class="ask"><b>A decision</b><span>Product, design, scope, naming, priorities, or a trade-off between options.</span></div>
+      <div class="ask"><b>A confirmation it will not proceed without</b><span>Merges, deletes, migrations, deploys, sending email or messages, spending money, touching production data.</span></div>
+      <div class="ask"><b>Something only you can do</b><span>Logging in, handing over a key, approving in a dashboard, buying something.</span></div>
+      <div class="ask"><b>A hand-off at the end of a turn</b><span>"Your call", "want me to…?", "should I…?", "I'll leave it to you", "tell me to run it".</span></div>
+    </div>
+    <p class="notask"><b>Not asks:</b> the agent's own tool-permission prompts, which keep their usual approval flow; status updates that need nothing from you; questions the agent can answer from the code. decyde is built for agents running with permissions skipped, where nothing else stops to ask you.</p>
+  </section>
+
   <section id="delivery">
     <h2>Getting the answer back</h2>
     <p class="lede">An agent that has finished its turn will not notice an answer on its own. decyde sends it as soon as you give it, even twelve hours later, through whatever the agent is running in.</p>
@@ -218,12 +263,14 @@ footer a { color: var(--dim); }
 
   <section>
     <h2>Local by default</h2>
-    <p class="lede">decyde never leaves your machine. There is no account, no cloud service and no telemetry.</p>
+    <p class="lede">Your questions and answers never leave your machine. There is no account, no cloud service and no telemetry. The one outbound request is a daily check of the latest version number on GitHub, which you can turn off with <code>decyde config update_check off</code>.</p>
     <div class="facts">
       <div class="fact"><b>One SQLite file</b><span>Questions and answers live in <code>~/.decyde</code>. Agents write to it directly, so asking works even when the server is down.</span></div>
       <div class="fact"><b>Bound to localhost</b><span>The web UI listens on 127.0.0.1 only and refuses requests from other sites.</span></div>
       <div class="fact"><b>Python standard library</b><span>No packages to install, nothing to audit beyond the repo.</span></div>
       <div class="fact"><b>Reversible setup</b><span><code>decyde uninstall</code> removes the service, the agent instructions and the hooks it added.</span></div>
+      <div class="fact"><b>Updates in one command</b><span>Both views tell you when a new version is out. <code>decyde update</code> installs it and refreshes your agents' instructions and hooks.</span></div>
+      <div class="fact"><b>Open source</b><span>MIT licensed. Read it, fork it, or send a pull request on GitHub.</span></div>
     </div>
   </section>
 

@@ -293,7 +293,10 @@ def uninstall(args) -> int:
 def status(args) -> int:
     conn = connect()
     n_open = conn.execute("SELECT COUNT(*) FROM questions WHERE status='open'").fetchone()[0]
-    print(f"decyde for {load_config().get('name', '(not set up)')}")
+    from decyde import __version__, update
+    newer = update.available()
+    print(f"decyde {__version__} for {load_config().get('name', '(not set up)')}"
+          + (f"  ·  {newer} available: run `decyde update`" if newer else ""))
     say(f"database   {DB_PATH} ({n_open} open)")
     say(f"config     {CONFIG_PATH}")
     say(f"server     {'running' if server_up() else 'NOT running'} on http://127.0.0.1:{PORT}")

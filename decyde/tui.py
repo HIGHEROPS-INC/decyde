@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from decyde import splash
+from decyde import splash, update
 from decyde.delivery import dismiss_question, record_answer
 from decyde.store import PORT, change_marker, connect, get_question, human_name, load_config, row_dict
 
@@ -213,8 +213,11 @@ def tui(show_splash: bool = True) -> None:
                     f"awaiting ack {sum(q['status'] == 'answered' for q in st['rows'])}"
             stat_attr = C["purple4"] | curses.A_BOLD if opn else C["dim"]
             if splash.big_header_fits(h, W):
+                newer = update.available()
                 header.draw(scr, C, put, [(prompt, C["dim"]), (splash.TAGLINE, C["teal2"]), ("", 0),
-                                     (stats, stat_attr), (f"http://127.0.0.1:{PORT}", C["faint"])])
+                                     (stats, stat_attr), (f"http://127.0.0.1:{PORT}", C["faint"]),
+                                     (f"decyde {newer} is available: run `decyde update`" if newer else "",
+                                      C["purple4"] | curses.A_BOLD)])
                 tabs_y = splash.HEADER_ROWS
             else:
                 put(0, 1, prompt + ":~$ ", C["dim"])

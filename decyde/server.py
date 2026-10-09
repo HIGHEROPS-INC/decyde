@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 from decyde import __version__
 from decyde.delivery import delivery_loop, dismiss_question, notify_new, record_answer
+from decyde import update
 from decyde.herdr_sidebar import REFRESH_SECONDS, Sidebar
 from decyde.store import DB_PATH, change_marker, connect, get_question, human_name, row_dict
 
@@ -97,7 +98,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         elif path == "/api/meta":
             self.send_json({"name": human_name(), "host": socket.gethostname().split(".")[0],
-                            "version": __version__})
+                            "version": __version__, "update": update.available()})
         elif path == "/api/questions":
             since = datetime.fromtimestamp(time.time() - 14 * 86400, timezone.utc).isoformat()
             rows = connect().execute(
@@ -159,11 +160,20 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(get_question(conn, qid))
 
 
+def update_loop(stop: threading.Event) -> None:
+    """Refresh the cached latest version; check() itself only hits GitHub once a day."""
+    while True:
+        update.check()
+        if stop.wait(3600):
+            return
+
+
 def serve(port: int) -> None:
     connect()
     stop = threading.Event()
     threading.Thread(target=HUB.watch, args=(stop,), daemon=True).start()
     threading.Thread(target=delivery_loop, args=(stop,), daemon=True).start()
+    threading.Thread(target=update_loop, args=(stop,), daemon=True).start()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     httpd.daemon_threads = True
     print(f"decyde on http://127.0.0.1:{port}  (db: {DB_PATH})", flush=True)

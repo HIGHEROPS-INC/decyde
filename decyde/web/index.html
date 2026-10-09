@@ -4,8 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>decyde</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root {
   /* purple, teal, grey. Old names kept as roles: green = confirm/answered (teal),
@@ -32,6 +30,8 @@ header { position: sticky; top: 0; z-index: 5; background: rgba(12,11,18,.92); b
 .stats b { color: var(--text); font-weight: 500; }
 .stats .hot b { color: var(--amber); }
 .spacer { flex: 1; }
+.update { color: var(--amber); border: 1px solid #3f3566; border-radius: 4px; padding: 3px 9px; }
+.update code { color: var(--violet); }
 .live { color: var(--dim); display: flex; align-items: center; gap: 6px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
 .live.on .dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
@@ -111,6 +111,7 @@ textarea:focus { border-color: #6d5bd0; box-shadow: 0 0 0 1px #6d5bd0; }
       <span>awaiting ack <b id="s-await">0</b></span>
     </div>
     <div class="spacer"></div>
+    <div class="update" id="update" hidden></div>
     <button class="ghost" id="notif-btn" hidden>enable alerts</button>
     <div class="live" id="live"><span class="dot"></span><span id="live-text">offline</span></div>
   </div>
@@ -274,7 +275,11 @@ function connect() {
   es.onerror = () => { $("#live").classList.remove("on"); $("#live-text").textContent = "reconnecting"; };
 }
 setInterval(() => document.querySelectorAll(".meta.when").length && render(), 60000);
-fetch("/api/meta").then(r => r.json()).then(m => { ME = m.name || ME; $("#prompt").textContent = `${ME.toLowerCase()}@${m.host}:~$`; render(); });
+fetch("/api/meta").then(r => r.json()).then(m => {
+  ME = m.name || ME; $("#prompt").textContent = `${ME.toLowerCase()}@${m.host}:~$`;
+  if (m.update) { const u = $("#update"); u.hidden = false; u.innerHTML = `decyde ${esc(m.update)} is available: run <code>decyde update</code>`; }
+  render();
+});
 connect();
 </script>
 </body>
