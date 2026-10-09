@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS questions (
   inbox_token     TEXT,
   codex_thread    TEXT,                   -- Codex thread, to start a turn through its app-server
   waiter_pid      INTEGER,                -- a running `decyde wait` that will hand the answer over
+  relay_pid       INTEGER,                -- the asker's own relay that posts to its Claude inbox
   title           TEXT NOT NULL,
   question        TEXT NOT NULL,
   context         TEXT,
@@ -58,7 +59,7 @@ CREATE TABLE IF NOT EXISTS sessions (     -- agent sessions that turned decyde o
 );
 """
 LATE_COLUMNS = ("tmux_pane", "tmux_socket", "session_id", "inbox_socket", "inbox_token", "codex_thread",
-                "waiter_pid")
+                "waiter_pid", "relay_pid")
 
 
 def now() -> str:
@@ -75,7 +76,7 @@ def connect() -> sqlite3.Connection:
     have = {r[1] for r in conn.execute("PRAGMA table_info(questions)")}
     for col in LATE_COLUMNS:
         if col not in have:
-            conn.execute(f"ALTER TABLE questions ADD COLUMN {col} {'INTEGER' if col == 'waiter_pid' else 'TEXT'}")
+            conn.execute(f"ALTER TABLE questions ADD COLUMN {col} {'INTEGER' if col.endswith('_pid') else 'TEXT'}")
     return conn
 
 

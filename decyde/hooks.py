@@ -94,8 +94,11 @@ def claim_answers(conn, session: str) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM questions WHERE session_id=? AND status='answered' "
         f"AND {UNCLAIMED}", (session,)).fetchall()
+    from decyde.delivery import waiter_alive
     claimed = []
     for r in rows:
+        if waiter_alive(dict(r), "relay_pid"):
+            continue  # the relay delivers this one through the inbox
         cur = conn.execute(
             "UPDATE questions SET delivery='pushed via agent hook', delivered_at=?, updated_at=? "
             f"WHERE id=? AND {UNCLAIMED}", (now(), now(), r["id"]))
@@ -207,8 +210,8 @@ def has_push_route(conn, session: str) -> bool:
     """Can decyde wake this session when an answer comes? Then the hook must not hold it."""
     from decyde.delivery import waiter_alive
     rows = conn.execute("SELECT * FROM questions WHERE session_id=? AND status='open'", (session,)).fetchall()
-    return any(r["herdr_pane"] or r["tmux_pane"] or r["inbox_socket"] or r["codex_thread"]
-               or waiter_alive(dict(r)) for r in rows)
+    return any(r["herdr_pane"] or r["tmux_pane"] or r["codex_thread"]
+               or waiter_alive(dict(r)) or waiter_alive(dict(r), "relay_pid") for r in rows)
 
 
 HANDLERS = {"post-tool-use": post_tool_use, "stop": stop, "prompt": prompt}

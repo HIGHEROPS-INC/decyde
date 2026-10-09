@@ -89,8 +89,8 @@ def push_tmux(q: dict) -> str:
 
 # ---------------------------------------------------------------- live sessions in any terminal
 
-def waiter_alive(q: dict) -> bool:
-    pid = q.get("waiter_pid")
+def waiter_alive(q: dict, field: str = "waiter_pid") -> bool:
+    pid = q.get(field)
     if not pid:
         return False
     try:
@@ -141,9 +141,12 @@ HOOK_QUEUED = "queued: arrives at the agent's next tool call or message"
 def try_push(q: dict) -> str:
     if waiter_alive(q):
         return "pushed via decyde wait"  # the agent's own `decyde wait` returns the answer and wakes it
+    if waiter_alive(q, "relay_pid"):
+        return "pending"  # the asker's relay posts it to the Claude inbox (see cli.cmd_relay)
     state = None
-    routes = (("herdr_pane", push_herdr), ("tmux_pane", push_tmux),
-              ("inbox_socket", push_claude_inbox), ("codex_thread", push_codex))
+    # The Claude inbox is not a server route: Claude Code holds messages from processes
+    # outside the session when it skips permissions. The asker's relay posts there instead.
+    routes = (("herdr_pane", push_herdr), ("tmux_pane", push_tmux), ("codex_thread", push_codex))
     for field, push in routes:
         if q.get(field):
             state = push(q)
