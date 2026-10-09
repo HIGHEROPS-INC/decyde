@@ -75,7 +75,7 @@ that, decyde pushes the answer to an agent that has gone quiet:
 |---|---|
 | [Herdr](https://herdr.dev) pane | Typed in as a prompt once the agent is idle |
 | tmux pane | Pasted in once the pane is still and no approval dialog is showing |
-| Claude Code, any terminal | Hooks: when the session tries to stop with an open question it waits for the answer (10 min default, `decyde config claude_stop_wait_minutes`), and a later answer arrives with your next message |
+| Claude Code, Codex or Grok in a plain terminal | Hooks: a working agent gets the answer at its next tool call; one that ends its turn with an open question waits for the first answer (up to 24h, `decyde config claude_stop_wait_minutes`), and a later answer arrives with your next message |
 | Anything else | Polling |
 
 Pushed answers start with `[decyde]` and tell the agent to run `decyde ack <id>`.

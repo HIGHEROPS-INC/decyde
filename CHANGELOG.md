@@ -4,6 +4,15 @@ All notable changes to decyde. Versions follow [semantic versioning](https://sem
 each one is a [GitHub release](https://github.com/HIGHEROPS-INC/decyde/releases), and the
 installer and `decyde update` install the latest release.
 
+## [0.3.2] - 2026-10-09
+
+### Fixed
+- Answers no longer pile up behind a waiting agent. An agent in Herdr or tmux that ended
+  its turn with open questions was held by the Stop hook until every question was
+  answered, so answers typed into its pane sat queued behind the hook. The Stop hook no
+  longer holds the turn when the answer can be typed into a pane; that typed answer wakes
+  the agent. In a plain terminal it now lets go at the first answer, not the last.
+
 ## [0.3.1] - 2026-10-09
 
 ### Fixed
@@ -63,6 +72,7 @@ installer and `decyde update` install the latest release.
   instructions for Claude Code, Codex, Grok and Gemini/Antigravity, and Claude Code hooks.
 - The curl installer at https://decyde.dev/install.
 
+[0.3.2]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.3.2
 [0.3.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.3.1
 [0.3.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.3.0
 [0.2.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.2.0

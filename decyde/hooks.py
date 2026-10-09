@@ -5,9 +5,9 @@
   post-tool-use  remembers which session ran `decyde ask`, and hands a working agent any
                  new answer at its next tool call (as typed messages arrive mid-turn)
   stop           when decyde is on and the agent tries to end its turn on an ask it never
-                 posted, sends it back once to post it; when the session has an open
-                 question, keeps it waiting for the answer (default up to 24h) and hands it
-                 back so the agent continues; Esc interrupts the wait
+                 posted, sends it back once to post it. In a plain terminal (no Herdr or
+                 tmux pane to type into) a session with an open question waits for the
+                 first answer (default up to 24h) and gets it handed back; Esc interrupts
 
 Claude and Codex send snake_case fields, Grok camelCase; `field` reads either.
 """
@@ -177,17 +177,36 @@ def stop(data: dict) -> None:
             f"recommendation), then end your turn with 'Waiting on decyde #N'. If nothing in it actually "
             f"needs {name}, end your turn without posting.")}))
         return
+    got = claim_answers(conn, session)
+    if got:
+        print(json.dumps({"decision": "block", "reason": "\n\n".join(answer_prompt(q) for q in got)}))
+        return
+    open_ids = [r["id"] for r in conn.execute(
+        "SELECT id FROM questions WHERE session_id=? AND status='open'", (session,))]
+    if not open_ids or has_push_route(conn, session):
+        # In Herdr or tmux the answer is typed into the pane whenever it comes, which wakes
+        # the agent. Holding the turn here would only make those typed answers queue up
+        # behind the hook, so let the agent stop.
+        return
+    # A plain terminal: nothing can wake an idle session, so hold the turn until any one
+    # answer arrives (not all of them), then hand it back so the agent continues.
     deadline = time.time() + stop_wait_minutes() * 60
-    while True:
+    marks = ",".join("?" * len(open_ids))
+    while time.time() < deadline:
+        time.sleep(POLL_SECONDS)
         got = claim_answers(conn, session)
         if got:
             print(json.dumps({"decision": "block", "reason": "\n\n".join(answer_prompt(q) for q in got)}))
             return
-        still_open = conn.execute("SELECT 1 FROM questions WHERE session_id=? AND status='open'",
-                                  (session,)).fetchone()
-        if not still_open or time.time() >= deadline:
-            return
-        time.sleep(POLL_SECONDS)
+        if conn.execute(f"SELECT 1 FROM questions WHERE id IN ({marks}) AND status != 'open'",
+                        open_ids).fetchone():
+            return  # answered or withdrawn some other way; let the agent pick it up
+
+
+def has_push_route(conn, session: str) -> bool:
+    return bool(conn.execute(
+        "SELECT 1 FROM questions WHERE session_id=? AND (herdr_pane IS NOT NULL OR tmux_pane IS NOT NULL)",
+        (session,)).fetchone())
 
 
 HANDLERS = {"post-tool-use": post_tool_use, "stop": stop, "prompt": prompt}
