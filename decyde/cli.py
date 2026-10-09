@@ -122,10 +122,10 @@ def cmd_ask(args) -> int:
     conn = connect()
     cur = conn.execute(
         "INSERT INTO questions (created_at, updated_at, agent, agent_name, task, project, cwd, git_branch, "
-        "herdr_pane, tmux_pane, tmux_socket, title, question, context, options, recommendation, urgency) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "herdr_pane, tmux_pane, tmux_socket, session_id, title, question, context, options, recommendation, "
+        "urgency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (ts, ts, agent, args.name, args.task, args.project or Path(cwd).name.strip(), cwd, git_branch(cwd),
-         herdr, tmux_pane, tmux_socket, args.title, args.question,
+         herdr, tmux_pane, tmux_socket, env.get("GROK_SESSION_ID"), args.title, args.question,
          args.context, json.dumps(args.option) if args.option else None, args.recommend, args.urgency),
     )
     qid = cur.lastrowid
@@ -237,7 +237,7 @@ def cmd_config(args) -> int:
         print("Run `decyde setup` to update the name in your agents' instructions.")
     if args.key == "claude_stop_wait_minutes":
         from decyde import install
-        install.edit_claude_settings(install=True)  # the Stop hook's timeout follows this setting
+        install.edit_agent_hooks(install=True)  # the Stop hooks' timeout follows this setting
     return 0
 
 
@@ -303,7 +303,7 @@ def build_parser() -> argparse.ArgumentParser:
     su.add_argument("--name", help="what agents call you")
     su.add_argument("--no-service", action="store_true")
     su.add_argument("--no-agents", action="store_true", help="leave agent instruction files alone")
-    su.add_argument("--no-hooks", action="store_true", help="leave Claude Code settings alone")
+    su.add_argument("--no-hooks", action="store_true", help="leave agent hook settings alone")
     su.add_argument("--no-herdr", action="store_true", help="leave Herdr's sidebar config alone")
     su.set_defaults(fn=install.setup)
     un = sub.add_parser("uninstall", help="undo setup")

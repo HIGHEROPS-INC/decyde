@@ -26,13 +26,29 @@ macOS or Linux. Run the same command again to upgrade.
 - Adds the decyde protocol to each agent it finds, between
   `<!-- decyde:begin -->` markers: `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
   `~/.grok/AGENTS.md`, `~/.gemini/GEMINI.md`.
-- Adds three Claude Code hooks to `~/.claude/settings.json` (backed up first).
+- Adds three hooks for Claude Code (`~/.claude/settings.json`, backed up first), Codex
+  (`~/.codex/hooks.json`) and Grok (`~/.grok/hooks/decyde.json`), plus a `/decyde`
+  command for Claude Code.
 - If [Herdr](https://herdr.dev) is installed, adds a sidebar row to
   `~/.config/herdr/config.toml` (between `# >>> decyde` markers) so agents
   waiting on you are marked there. If you already customise the sidebar rows,
   setup leaves them alone and prints the one token to add.
 
 Skip any part with `--no-service`, `--no-agents`, `--no-hooks` or `--no-herdr`.
+
+## Turning it on
+
+decyde is off by default in every agent session, so short hands-on sessions stay as
+they are. Turn it on for a session by telling the agent **"use decyde"** (or
+`decyde on`; Claude Code also has `/decyde on`), and off with "decyde off". While it
+is on, every ask for you goes to decyde: decisions, confirmations the agent will not
+proceed without (merges, deletes, deploys, sending, spending), steps only you can take
+(logins, keys, dashboards), and any "your call" or "want me to...?" hand-off at the end
+of a turn. Tool-permission prompts are left to the agent's own approval flow.
+
+Claude Code, Codex and Grok also get a safety net: if a session with decyde on ends its
+turn on something that reads like an ask without posting it, a Stop hook sends the agent
+back once to post it. Codex asks you to approve new hooks the first time it sees them.
 
 ## Answering
 

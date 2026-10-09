@@ -1,12 +1,15 @@
-"""Claude Code hooks: deliver answers to plain-terminal Claude sessions.
+"""Agent hooks for Claude Code, Codex and Grok, which share one hook protocol.
 
-Claude Code cannot be woken once idle, so:
-  post-tool-use  remembers which session ran `decyde ask`, and hands a working Claude
-                 any new answer at its next tool call (as typed messages arrive mid-turn)
-  stop           when that session tries to stop with an open question, keeps it waiting
-                 until the answer comes (default up to 24h) and hands it back so Claude
-                 continues; Esc interrupts the wait
-  prompt         injects any late answer into the next message the human sends
+  prompt         turns decyde on or off for the session when the human says so
+                 ("use decyde", "decyde off", /decyde on), and hands over any late answer
+  post-tool-use  remembers which session ran `decyde ask`, and hands a working agent any
+                 new answer at its next tool call (as typed messages arrive mid-turn)
+  stop           when decyde is on and the agent tries to end its turn on an ask it never
+                 posted, sends it back once to post it; when the session has an open
+                 question, keeps it waiting for the answer (default up to 24h) and hands it
+                 back so the agent continues; Esc interrupts the wait
+
+Claude and Codex send snake_case fields, Grok camelCase; `field` reads either.
 """
 from __future__ import annotations
 
@@ -16,13 +19,57 @@ import sys
 import time
 
 from decyde.delivery import answer_prompt
-from decyde.store import connect, now, row_dict, stop_wait_minutes
+from decyde.store import connect, human_name, now, row_dict, stop_wait_minutes
 
 ASK_RE = re.compile(r"\b(decyde|dhub)\s+ask\b")
 ID_RE = re.compile(r"question #(\d+)|\"id\":\s*(\d+)")
 POLL_SECONDS = 3
 UNCLAIMED = "(delivery IS NULL OR (delivery NOT LIKE 'pushed%' AND delivery != 'pushing'))"
 
+TURN_ON = re.compile(r"\b(use|enable|start using|turn on)\s+decyde\b|\bdecyde\s+(on|mode on)\b", re.I)
+TURN_OFF = re.compile(r"\b(stop using|disable|turn off|don'?t use|do not use)\s+decyde\b|\bdecyde\s+off\b", re.I)
+# Phrases that hand something to the human. Deliberately specific: a false alarm costs
+# the agent one extra step, but a vague pattern would fire on ordinary summaries.
+ASK_PHRASES = re.compile(
+    r"your call|up to you|leave (it|this|that) (to|with) you|let me know|want me to|would you like|"
+    r"do you want|should i\b|shall i\b|tell me (to|if|whether|which)|say the word|"
+    r"(need|needs|waiting on|waiting for) your|your (decision|approval|confirmation|go-ahead|sign-off)|"
+    r"(please|can you|could you) (confirm|approve|decide|choose|pick|provide|log in|sign in|run|check)|"
+    r"before i (proceed|continue|run|merge|deploy|push|delete)", re.I)
+
+
+def field(data: dict, snake: str, camel: str):
+    return data.get(snake) if data.get(snake) is not None else data.get(camel)
+
+
+def session_of(data: dict) -> str | None:
+    return field(data, "session_id", "sessionId")
+
+
+# ---------------------------------------------------------------- session state
+
+def set_enabled(conn, session: str, on: bool) -> None:
+    conn.execute("INSERT INTO sessions (session_id, enabled, updated_at) VALUES (?,?,?) "
+                 "ON CONFLICT(session_id) DO UPDATE SET enabled=excluded.enabled, updated_at=excluded.updated_at",
+                 (session, int(on), now()))
+
+
+def session_row(conn, session: str):
+    return conn.execute("SELECT * FROM sessions WHERE session_id=?", (session,)).fetchone()
+
+
+def note_turn(conn, session: str) -> None:
+    conn.execute("UPDATE sessions SET turn_started_at=? WHERE session_id=?", (now(), session))
+
+
+def looks_like_ask(message: str) -> bool:
+    if not message or "decyde #" in message.lower():
+        return False
+    tail = message.strip()[-400:]
+    return bool(ASK_PHRASES.search(message)) or tail.endswith("?")
+
+
+# ---------------------------------------------------------------- answers
 
 def claim_answers(conn, session: str) -> list[dict]:
     """Answers for this session nobody has delivered yet, claimed atomically."""
@@ -32,38 +79,86 @@ def claim_answers(conn, session: str) -> list[dict]:
     claimed = []
     for r in rows:
         cur = conn.execute(
-            "UPDATE questions SET delivery='pushed via claude hook', delivered_at=?, updated_at=? "
+            "UPDATE questions SET delivery='pushed via agent hook', delivered_at=?, updated_at=? "
             f"WHERE id=? AND {UNCLAIMED}", (now(), now(), r["id"]))
         if cur.rowcount:
             claimed.append(row_dict(r))
     return claimed
 
 
-def post_tool_use(data: dict) -> None:
-    session = data.get("session_id")
+def context(event: str, text: str) -> None:
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}))
+
+
+# ---------------------------------------------------------------- events
+
+def prompt(data: dict) -> None:
+    session = session_of(data)
     if not session:
         return
     conn = connect()
-    cmd = str((data.get("tool_input") or {}).get("command", ""))
-    if data.get("tool_name") == "Bash" and ASK_RE.search(cmd):
-        output = json.dumps(data.get("tool_response")).replace('\\"', '"')
+    text = str(data.get("prompt") or "")
+    notes = []
+    if TURN_OFF.search(text):
+        set_enabled(conn, session, False)
+        notes.append("decyde is now OFF for this session: ask in chat as usual.")
+    elif TURN_ON.search(text):
+        set_enabled(conn, session, True)
+        notes.append(f"decyde is now ON for this session: every ask for {human_name()} goes through "
+                     "`decyde ask` (see the decyde section of your instructions), not just chat.")
+    note_turn(conn, session)
+    notes += [answer_prompt(q) for q in claim_answers(conn, session)]
+    if notes:
+        context("UserPromptSubmit", "\n\n".join(notes))
+
+
+def post_tool_use(data: dict) -> None:
+    session = session_of(data)
+    if not session:
+        return
+    conn = connect()
+    if ASK_RE.search(json.dumps(field(data, "tool_input", "toolInput"))):
+        output = json.dumps(field(data, "tool_response", "toolResult")).replace('\\"', '"')
         for a, b in ID_RE.findall(output):  # one command may ask several questions
             conn.execute("UPDATE questions SET session_id=? WHERE id=? AND session_id IS NULL",
                          (session, int(a or b)))
     got = claim_answers(conn, session)
     if got:
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
-            "additionalContext": "\n\n".join(answer_prompt(q) for q in got)}}))
+        context("PostToolUse", "\n\n".join(answer_prompt(q) for q in got))
+
+
+def unposted_ask(conn, session: str, data: dict) -> bool:
+    """decyde is on, the agent's final message hands something to the human, it posted
+    nothing this turn, and it has not been sent back for this already this turn."""
+    row = session_row(conn, session)
+    if not row or not row["enabled"]:
+        return False
+    if not looks_like_ask(str(field(data, "last_assistant_message", "lastAssistantMessage") or "")):
+        return False
+    since = row["turn_started_at"] or "0"
+    if row["nudged_at"] and row["nudged_at"] >= since:
+        return False  # already sent back once this turn; never loop
+    asked = conn.execute("SELECT 1 FROM questions WHERE session_id=? AND created_at >= ?",
+                         (session, since)).fetchone()
+    return not asked
 
 
 def stop(data: dict) -> None:
-    session = data.get("session_id")
+    session = session_of(data)
     if not session:
         return
     conn = connect()
-    wait = stop_wait_minutes() * 60
-    deadline = time.time() + wait
+    if unposted_ask(conn, session, data):
+        conn.execute("UPDATE sessions SET nudged_at=? WHERE session_id=?", (now(), session))
+        name = human_name()
+        print(json.dumps({"decision": "block", "reason": (
+            f"[decyde] decyde is on for this session and your last message hands something to {name} "
+            f"(a decision, a confirmation, or a step only {name} can take), but nothing was posted to "
+            f"decyde this turn. Post it now with `decyde ask` (one question per decision, with your "
+            f"recommendation), then end your turn with 'Waiting on decyde #N'. If nothing in it actually "
+            f"needs {name}, end your turn without posting.")}))
+        return
+    deadline = time.time() + stop_wait_minutes() * 60
     while True:
         got = claim_answers(conn, session)
         if got:
@@ -74,15 +169,6 @@ def stop(data: dict) -> None:
         if not still_open or time.time() >= deadline:
             return
         time.sleep(POLL_SECONDS)
-
-
-def prompt(data: dict) -> None:
-    session = data.get("session_id")
-    got = claim_answers(connect(), session) if session else []
-    if got:
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
-            "additionalContext": "\n\n".join(answer_prompt(q) for q in got)}}))
 
 
 HANDLERS = {"post-tool-use": post_tool_use, "stop": stop, "prompt": prompt}

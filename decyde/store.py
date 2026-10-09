@@ -45,6 +45,13 @@ CREATE TABLE IF NOT EXISTS questions (
   acknowledged_at TEXT
 );
 CREATE INDEX IF NOT EXISTS questions_status ON questions(status);
+CREATE TABLE IF NOT EXISTS sessions (     -- agent sessions that turned decyde on or off
+  session_id      TEXT PRIMARY KEY,
+  enabled         INTEGER NOT NULL DEFAULT 0,
+  updated_at      TEXT NOT NULL,
+  turn_started_at TEXT,                   -- last prompt, so the stop check knows the turn
+  nudged_at       TEXT                    -- last time the stop check sent the agent back
+);
 """
 LATE_COLUMNS = ("tmux_pane", "tmux_socket", "session_id")
 

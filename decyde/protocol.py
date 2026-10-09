@@ -3,13 +3,36 @@ from __future__ import annotations
 
 BEGIN, END = "<!-- decyde:begin -->", "<!-- decyde:end -->"
 
-TEMPLATE = """## decyde (asking {name} for a decision)
+TEMPLATE = """## decyde (routing asks for {name} through an inbox)
 
-{name} runs many agents at once and misses questions buried in terminal output.
-When you need {name} to decide something (a product or design choice, scope,
-spending, anything destructive or outward-facing, or a genuine ambiguity you
-cannot resolve from the code or sensible defaults), post it with the `decyde`
-CLI instead of only asking in your chat output.
+decyde is **off** by default. It turns **on** for the rest of a session when {name}
+says "use decyde" or "decyde on" (or runs `/decyde on`), and off again on "decyde off".
+While it is off, ask in chat as usual; the only part that still applies is acting on
+`[decyde]` answers to questions you already posted.
+
+{name} runs many agents at once, often unattended, and misses asks that are buried in
+terminal output. While decyde is on, **every ask goes through `decyde ask`**, not only
+into chat. An ask is anything that needs {name} before it happens:
+
+- **A decision**: product, design, scope, naming, priorities, a trade-off between options.
+- **A confirmation you will not proceed without**: anything irreversible or destructive
+  (merges, deletes, migrations, force pushes), production or client data, deploys,
+  sending email or messages, spending money.
+- **Something only {name} can do**: log in, provide a key or secret, approve in a
+  dashboard, buy something, any offline step.
+- **A hand-off at the end of your turn**: "your call", "want me to...?", "should I...?",
+  "let me know", "I'll leave it to you", "tell me to run it and I'll watch it".
+
+Not asks: your harness's own tool-permission prompts, status updates that need nothing
+from {name}, and questions you can answer from the code, docs or sensible defaults.
+
+Example. Ending a turn with "Your call: the five-company group still has 3 unmerged
+duplicates. Merges can't be undone, so I'll leave it to you, or tell me to run it" is an
+ask. Post it (title "Re-run the five-company merge?", options "Run it, I'll watch" and
+"I'll do it myself", your recommendation), then end with "Waiting on decyde #N".
+
+The rule: if your message would end with a question for {name}, or with something
+{name} must do or approve, post it to decyde first. One question per decision.
 
 **Ask** (always identify yourself and what you are working on):
 
@@ -25,26 +48,25 @@ decyde ask --agent claude|codex|grok|antigravity|gemini|other \\
   --urgency high    # only if you are fully blocked; otherwise omit (normal) or use low
 ```
 
-It prints a question number, e.g. `#12`. Run it from your project directory so
-the project, git branch and terminal pane are captured automatically.
+It prints a question number, e.g. `#12`. Run it from your project directory so the
+project, git branch and terminal pane are captured automatically.
 
-**While you wait:** keep working on anything the decision does not block. Do not
-guess the answer to the blocked part.
+**While you wait:** keep working on anything the decision does not block. Do not guess
+the answer to the blocked part, and do not do the thing you asked about.
 
 **Getting the answer:**
-- The answer may arrive on its own as a message starting with `[decyde]`
-  (typed into your Herdr or tmux pane, or handed back by a Claude Code hook).
+- The answer may arrive on its own as a message starting with `[decyde]` (typed into
+  your Herdr or tmux pane, or handed back by an agent hook).
 - Also check back yourself: `decyde check 12` exits 0 and prints `ANSWER:` when
-  answered, 2 while still open, 3 if dismissed. Check at natural breakpoints and
-  before you finish your turn.
+  answered, 2 while still open, 3 if dismissed. Check at natural breakpoints and before
+  you finish your turn.
 - If you have nothing else to do, block on it: `decyde wait 12 --timeout 900`.
-  Otherwise keep each command under a couple of minutes while a question is
-  open: an answer handed over between tool calls waits for a running one.
+  Otherwise keep each command under a couple of minutes while a question is open: an
+  answer handed over between tool calls waits for a running one.
 - When you have the answer, run `decyde ack 12` and act on it.
 - If the question stops mattering: `decyde cancel 12 --reason "..."`.
 
-Before ending a turn with an open question, say which question number you are
-waiting on."""
+End a turn with an open question by naming it: "Waiting on decyde #12: <title>"."""
 
 
 def block(name: str) -> str:

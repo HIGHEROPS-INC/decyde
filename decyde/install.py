@@ -8,6 +8,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -23,6 +24,20 @@ LABEL = "dev.decyde.server"
 PLIST = HOMEDIR / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 UNIT = HOMEDIR / ".config" / "systemd" / "user" / "decyde.service"
 CLAUDE_SETTINGS = HOMEDIR / ".claude" / "settings.json"
+HOOK_FILES = (  # (label, hooks file, agent home). All three agents share Claude's hook format.
+    ("Claude Code", CLAUDE_SETTINGS, HOMEDIR / ".claude"),
+    ("Codex", HOMEDIR / ".codex" / "hooks.json", HOMEDIR / ".codex"),
+    ("Grok", HOMEDIR / ".grok" / "hooks" / "decyde.json", HOMEDIR / ".grok"),
+)
+SLASH_COMMAND = HOMEDIR / ".claude" / "commands" / "decyde.md"
+SLASH_COMMAND_TEXT = """---
+description: Turn decyde on or off for this session
+argument-hint: on | off
+---
+decyde $ARGUMENTS for this session. If on: from now on route every ask for me through
+`decyde ask`, as the decyde section of your instructions describes. If off: ask in chat as
+usual. Confirm in one short line.
+"""
 AGENT_FILES = (  # (label, config dir, instruction file). Only agents whose dir exists are touched.
     ("Claude Code", HOMEDIR / ".claude", "CLAUDE.md"),
     ("Codex", HOMEDIR / ".codex", "AGENTS.md"),
@@ -92,7 +107,19 @@ def install_service() -> None:
 """)
         domain = f"gui/{os.getuid()}"
         subprocess.run(["launchctl", "bootout", f"{domain}/{LABEL}"], capture_output=True)
-        subprocess.run(["launchctl", "bootstrap", domain, str(PLIST)], check=True)
+        # bootout returns before launchd has let go of the job; bootstrapping too soon fails
+        # with "5: Input/output error", so wait for it to disappear and retry briefly.
+        for _ in range(50):
+            if subprocess.run(["launchctl", "print", f"{domain}/{LABEL}"], capture_output=True).returncode:
+                break
+            time.sleep(0.1)
+        for attempt in range(5):
+            res = subprocess.run(["launchctl", "bootstrap", domain, str(PLIST)], capture_output=True, text=True)
+            if res.returncode == 0:
+                break
+            time.sleep(0.5 * (attempt + 1))
+        else:
+            raise SystemExit(f"could not start the background server: {res.stderr.strip()}")
         say(f"background server installed (launchd {LABEL})")
     elif shutil.which("systemctl"):
         UNIT.parent.mkdir(parents=True, exist_ok=True)
@@ -154,13 +181,13 @@ def is_ours(entry: dict) -> bool:
                for h in entry.get("hooks", []))
 
 
-def edit_claude_settings(install: bool) -> None:
-    if not CLAUDE_SETTINGS.parent.is_dir():
-        return
+def edit_hook_file(label: str, path: Path, install: bool) -> None:
+    """Merge (or remove) decyde's hooks in a Claude-format hooks file, keeping everything else."""
+    owned = path.name == "decyde.json"  # Grok's file is ours alone; the others are shared
     try:
-        settings = json.loads(CLAUDE_SETTINGS.read_text()) if CLAUDE_SETTINGS.exists() else {}
+        settings = json.loads(path.read_text()) if path.exists() else {}
     except json.JSONDecodeError:
-        say(f"Claude Code: {CLAUDE_SETTINGS} is not valid JSON, hooks not changed")
+        say(f"{label}: {path} is not valid JSON, hooks not changed")
         return
     hooks = settings.setdefault("hooks", {})
     for event, matcher, sub, timeout in HOOKS:
@@ -177,10 +204,34 @@ def edit_claude_settings(install: bool) -> None:
             hooks.pop(event, None)
     if not hooks:
         settings.pop("hooks")
-    if CLAUDE_SETTINGS.exists():
-        shutil.copy2(CLAUDE_SETTINGS, CLAUDE_SETTINGS.with_name("settings.json.decyde-backup"))
-    CLAUDE_SETTINGS.write_text(json.dumps(settings, indent=2) + "\n")
-    say(f"Claude Code: hooks {'installed' if install else 'removed'} in {CLAUDE_SETTINGS}")
+    if owned and not settings:
+        path.unlink(missing_ok=True)
+    else:
+        if path.exists() and not owned:
+            shutil.copy2(path, path.with_name(path.name + ".decyde-backup"))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(settings, indent=2) + "\n")
+    say(f"{label}: hooks {'installed' if install else 'removed'} in {path}")
+
+
+def edit_agent_hooks(install: bool) -> None:
+    for label, path, home in HOOK_FILES:
+        if home.is_dir():
+            edit_hook_file(label, path, install)
+    if install and HOOK_FILES[1][2].is_dir():
+        say("Codex: approve the new decyde hooks when Codex asks you to review them on its next start")
+
+
+def edit_slash_command(install: bool) -> None:
+    if not SLASH_COMMAND.parent.parent.is_dir():
+        return
+    if install:
+        SLASH_COMMAND.parent.mkdir(parents=True, exist_ok=True)
+        SLASH_COMMAND.write_text(SLASH_COMMAND_TEXT)
+        say(f"Claude Code: /decyde on|off command at {SLASH_COMMAND}")
+    elif SLASH_COMMAND.exists():
+        SLASH_COMMAND.unlink()
+        say(f"Claude Code: removed {SLASH_COMMAND}")
 
 
 def server_up() -> bool:
@@ -212,7 +263,8 @@ def setup(args) -> int:
     if not args.no_agents:
         configure_agents(name)
     if not args.no_hooks:
-        edit_claude_settings(install=True)
+        edit_agent_hooks(install=True)
+        edit_slash_command(install=True)
     if not args.no_herdr and (msg := herdr_sidebar.install_rows()):
         say(msg)
     print(f"\nDone. Open http://127.0.0.1:{PORT} or run `decyde` for the terminal UI.")
@@ -223,7 +275,8 @@ def uninstall(args) -> int:
     print("Removing decyde")
     remove_service()
     unconfigure_agents()
-    edit_claude_settings(install=False)
+    edit_agent_hooks(install=False)
+    edit_slash_command(install=False)
     if msg := herdr_sidebar.remove_rows():
         say(msg)
     if LINK.is_symlink():
@@ -249,10 +302,11 @@ def status(args) -> int:
         state = "configured" if f.exists() and protocol.BEGIN in f.read_text() else \
             "not configured" if cfg_dir.is_dir() else "not installed"
         say(f"{label:<25}{state}")
-    try:
-        hooked = any(is_ours(e) for es in json.loads(CLAUDE_SETTINGS.read_text()).get("hooks", {}).values()
-                     for e in es)
-    except (FileNotFoundError, json.JSONDecodeError):
-        hooked = False
-    say(f"{'Claude Code hooks':<25}{'installed' if hooked else 'not installed'}")
+    for label, path, home in HOOK_FILES:
+        try:
+            hooked = any(is_ours(e) for es in json.loads(path.read_text()).get("hooks", {}).values() for e in es)
+        except (FileNotFoundError, json.JSONDecodeError):
+            hooked = False
+        if home.is_dir():
+            say(f"{label + ' hooks':<25}{'installed' if hooked else 'not installed'}")
     return 0
