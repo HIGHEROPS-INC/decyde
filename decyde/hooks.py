@@ -26,8 +26,26 @@ ID_RE = re.compile(r"question #(\d+)|\"id\":\s*(\d+)")
 POLL_SECONDS = 3
 UNCLAIMED = "(delivery IS NULL OR (delivery NOT LIKE 'pushed%' AND delivery != 'pushing'))"
 
-TURN_ON = re.compile(r"\b(use|enable|start using|turn on)\s+decyde\b|\bdecyde\s+(on|mode on)\b", re.I)
-TURN_OFF = re.compile(r"\b(stop using|disable|turn off|don'?t use|do not use)\s+decyde\b|\bdecyde\s+off\b", re.I)
+# Toggles are instructions, so they only count outside questions ("is decyde on by default?")
+# and "decyde on/off" only when it ends the phrase ("decyde on", "decyde off for now"),
+# not mid-sentence ("the version of decyde on this mac").
+_TAIL = r"(?=\s*$|\s+(?:for|now|please|again|thanks)\b)"
+TURN_ON = re.compile(r"\b(?:use|enable|start using|turn on)\s+decyde\b|\bdecyde\s+on" + _TAIL, re.I)
+TURN_OFF = re.compile(r"\b(?:stop using|disable|turn off|don'?t use|do not use)\s+decyde\b|\bdecyde\s+off"
+                      + _TAIL, re.I)
+
+
+def toggle(text: str) -> bool | None:
+    """True to turn on, False to turn off, None when the prompt is not a toggle."""
+    for sentence in re.findall(r"[^.!?\n]*[.!?\n]?", text):
+        if sentence.rstrip().endswith("?"):
+            continue
+        body = sentence.strip().rstrip(".!")
+        if TURN_OFF.search(body):
+            return False
+        if TURN_ON.search(body):
+            return True
+    return None
 # Phrases that hand something to the human. Deliberately specific: a false alarm costs
 # the agent one extra step, but a vague pattern would fire on ordinary summaries.
 ASK_PHRASES = re.compile(
@@ -99,10 +117,11 @@ def prompt(data: dict) -> None:
     conn = connect()
     text = str(data.get("prompt") or "")
     notes = []
-    if TURN_OFF.search(text):
+    state = toggle(text)
+    if state is False:
         set_enabled(conn, session, False)
         notes.append("decyde is now OFF for this session: ask in chat as usual.")
-    elif TURN_ON.search(text):
+    elif state:
         set_enabled(conn, session, True)
         notes.append(f"decyde is now ON for this session: every ask for {human_name()} goes through "
                      "`decyde ask` (see the decyde section of your instructions), not just chat.")

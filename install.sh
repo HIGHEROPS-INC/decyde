@@ -5,7 +5,7 @@
 set -eu
 
 REPO="${DECYDE_REPO:-HIGHEROPS-INC/decyde}"
-REF="${DECYDE_REF:-main}"
+REF="${DECYDE_REF:-}"  # default: the latest GitHub release, else main
 DEST="${DECYDE_DIR:-$HOME/.local/share/decyde}"
 
 say() { printf '\033[38;5;141m%s\033[0m %s\n' "decyde" "$1"; }
@@ -16,6 +16,12 @@ command -v tar >/dev/null || die "tar is required"
 PY="$(command -v python3 || true)"
 [ -n "$PY" ] || die "python3 (3.11 or newer) is required"
 "$PY" -c 'import sys; sys.exit(sys.version_info < (3, 11))' || die "python3 is $("$PY" -V 2>&1 | cut -d' ' -f2); decyde needs 3.11 or newer"
+
+if [ -z "$REF" ]; then
+  REF=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
+    sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+  [ -n "$REF" ] || REF=main
+fi
 
 say "downloading $REPO@$REF"
 TMP="$(mktemp -d)"

@@ -1,8 +1,9 @@
 """Knowing about and installing new releases.
 
-Once a day the server reads the version string from the repo's main branch on GitHub
-(a plain GET; nothing about you or your questions is sent) and caches it, so both UIs
-can say when an update is out. `decyde config update_check off` disables it.
+Once a day the server reads the latest release from GitHub (a plain GET; nothing about
+you or your questions is sent) and caches it, so both UIs can say when an update is out.
+`decyde config update_check off` disables it. Installs and updates follow releases, so
+work on main reaches nobody until it is released.
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ import urllib.request
 from decyde import __version__
 from decyde.store import HOME, load_config
 
-VERSION_URL = "https://raw.githubusercontent.com/HIGHEROPS-INC/decyde/main/decyde/__init__.py"
+RELEASE_URL = "https://api.github.com/repos/HIGHEROPS-INC/decyde/releases/latest"
 INSTALL_URL = "https://decyde.dev/install"
 CACHE = HOME / "update.json"
 CHECK_EVERY = 24 * 3600
@@ -44,13 +45,14 @@ def check(force: bool = False) -> str | None:
         return None
     if force or time.time() - data.get("checked_at", 0) >= CHECK_EVERY:
         try:
-            with urllib.request.urlopen(VERSION_URL, timeout=5) as r:
-                m = re.search(r'__version__\s*=\s*"([^"]+)"', r.read().decode())
-            data = {"checked_at": time.time(), "latest": m.group(1) if m else data.get("latest")}
+            req = urllib.request.Request(RELEASE_URL, headers={"Accept": "application/vnd.github+json"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                tag = json.loads(r.read()).get("tag_name", "")
+            data = {"checked_at": time.time(), "latest": tag.lstrip("v") or data.get("latest")}
             HOME.mkdir(parents=True, exist_ok=True)
             CACHE.write_text(json.dumps(data))
-        except OSError:
-            pass  # offline: try again next time
+        except (OSError, ValueError):
+            pass  # offline or an unexpected reply: try again next time
     return data.get("latest")
 
 

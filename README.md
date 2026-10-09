@@ -109,11 +109,19 @@ The full protocol agents follow is in [`decyde/protocol.py`](decyde/protocol.py)
 | `decyde config [key] [value]` | `name`, `claude_stop_wait_minutes`, `splash`, `update_check` |
 | `decyde setup` / `decyde uninstall [--purge]` | Install or remove |
 
-Once a day the server reads the latest version number from this repo on GitHub so the
-UIs can tell you about updates. Nothing else is sent; turn it off with
+Once a day the server reads the latest release of this repo on GitHub so the UIs can
+tell you about updates. Nothing else is sent; turn it off with
 `decyde config update_check off`.
 
 Environment: `DECYDE_HOME` (default `~/.decyde`), `DECYDE_PORT` (default 7717).
+
+## Releases
+
+Changes are listed in [CHANGELOG.md](CHANGELOG.md) and published as
+[GitHub releases](https://github.com/HIGHEROPS-INC/decyde/releases). The installer and
+`decyde update` install the latest release, not the tip of `main`. To cut one: bump
+`__version__` in `decyde/__init__.py`, add the changelog section, push, then run
+`scripts/release.sh X.Y.Z`.
 
 ## License
 
