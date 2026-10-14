@@ -376,6 +376,15 @@ def build_parser() -> argparse.ArgumentParser:
     cf.add_argument("value", nargs="?")
     cf.set_defaults(fn=cmd_config)
 
+    from decyde import telegram
+    tg = sub.add_parser("telegram", help="answer from your phone through your own Telegram bot")
+    tgs = tg.add_subparsers(dest="tgcmd", required=True)
+    ts = tgs.add_parser("setup", help="connect a bot you created with @BotFather")
+    ts.add_argument("--token", help="the bot token (asked for if omitted)")
+    ts.set_defaults(fn=telegram.cmd_setup)
+    tgs.add_parser("status", help="show the connected bot").set_defaults(fn=telegram.cmd_status)
+    tgs.add_parser("off", help="disconnect Telegram").set_defaults(fn=telegram.cmd_off)
+
     rl = sub.add_parser("relay")  # started by `ask` inside a Claude Code session, not by people
     rl.add_argument("id", type=int)
     rl.set_defaults(fn=cmd_relay)

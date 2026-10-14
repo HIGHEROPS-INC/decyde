@@ -265,13 +265,14 @@ footer a { color: var(--dim); }
 
   <section>
     <h2>Local by default</h2>
-    <p class="lede">Your questions and answers never leave your machine. There is no account, no cloud service and no telemetry. The one outbound request is a daily check of the latest version number on GitHub, which you can turn off with <code>decyde config update_check off</code>.</p>
+    <p class="lede">Your questions and answers stay on your machine unless you connect a phone. There is no account, no cloud service and no telemetry. Without a phone connected, the one outbound request is a daily check of the latest version number on GitHub, which you can turn off with <code>decyde config update_check off</code>.</p>
     <div class="facts">
       <div class="fact"><b>One SQLite file</b><span>Questions and answers live in <code>~/.decyde</code>. Agents write to it directly, so asking works even when the server is down.</span></div>
       <div class="fact"><b>Bound to localhost</b><span>The web UI listens on 127.0.0.1 only and refuses requests from other sites.</span></div>
       <div class="fact"><b>Python standard library</b><span>No packages to install, nothing to audit beyond the repo.</span></div>
       <div class="fact"><b>Reversible setup</b><span><code>decyde uninstall</code> removes the service, the agent instructions and the hooks it added.</span></div>
       <div class="fact"><b>Updates in one command</b><span>Both views tell you when a new version is out. <code>decyde update</code> installs it and refreshes your agents' instructions and hooks.</span></div>
+      <div class="fact"><b>Answer from your phone</b><span>Connect your own Telegram bot with <code>decyde telegram setup</code>. Questions arrive with a button per option, and only your account can answer. Question text then passes through Telegram.</span></div>
       <div class="fact"><b>Open source</b><span>MIT licensed. Read it, fork it, or send a pull request on GitHub.</span></div>
     </div>
   </section>

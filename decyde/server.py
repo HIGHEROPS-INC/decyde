@@ -177,6 +177,8 @@ def serve(port: int) -> None:
     threading.Thread(target=HUB.watch, args=(stop,), daemon=True).start()
     threading.Thread(target=delivery_loop, args=(stop,), daemon=True).start()
     threading.Thread(target=update_loop, args=(stop,), daemon=True).start()
+    from decyde import telegram
+    threading.Thread(target=telegram.run, args=(stop,), daemon=True).start()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     httpd.daemon_threads = True
     print(f"decyde on http://127.0.0.1:{port}  (db: {DB_PATH})", flush=True)

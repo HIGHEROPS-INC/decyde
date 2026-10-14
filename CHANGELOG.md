@@ -4,6 +4,18 @@ All notable changes to decyde. Versions follow [semantic versioning](https://sem
 each one is a [GitHub release](https://github.com/HIGHEROPS-INC/decyde/releases), and the
 installer and `decyde update` install the latest release.
 
+## [0.5.0] - 2026-10-13
+
+### Added
+- Answer from your phone through your own Telegram bot (`decyde telegram setup`).
+  Each question arrives with a button per option and a Dismiss button; replying to the
+  message answers it with your own text, and `/open` lists what is waiting. Answers are
+  delivered to the agent like any other. Messages update when a question is answered
+  elsewhere or withdrawn. Only the Telegram account that set the bot up can answer.
+
+### Changed
+- `~/.decyde/config.json` is readable only by you, since it can hold the bot token.
+
 ## [0.4.3] - 2026-10-09
 
 ### Changed
@@ -116,6 +128,7 @@ installer and `decyde update` install the latest release.
   instructions for Claude Code, Codex, Grok and Gemini/Antigravity, and Claude Code hooks.
 - The curl installer at https://decyde.dev/install.
 
+[0.5.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.0
 [0.4.3]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.3
 [0.4.2]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.2
 [0.4.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.1

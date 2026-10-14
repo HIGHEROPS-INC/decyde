@@ -142,6 +142,13 @@ WantedBy=default.target
         say("no launchd or systemd found: run `decyde serve` yourself")
 
 
+def restart_service() -> None:
+    if PLIST.exists():
+        subprocess.run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{LABEL}"], capture_output=True)
+    elif UNIT.exists():
+        subprocess.run(["systemctl", "--user", "restart", "decyde.service"], capture_output=True)
+
+
 def remove_service() -> None:
     if PLIST.exists():
         subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"], capture_output=True)

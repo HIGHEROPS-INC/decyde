@@ -50,6 +50,12 @@ CREATE TABLE IF NOT EXISTS questions (
   acknowledged_at TEXT
 );
 CREATE INDEX IF NOT EXISTS questions_status ON questions(status);
+CREATE TABLE IF NOT EXISTS telegram_messages (  -- the Telegram message showing each question
+  qid        INTEGER PRIMARY KEY,
+  chat_id    INTEGER NOT NULL,
+  message_id INTEGER NOT NULL,
+  closed     INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS sessions (     -- agent sessions that turned decyde on or off
   session_id      TEXT PRIMARY KEY,
   enabled         INTEGER NOT NULL DEFAULT 0,
@@ -117,8 +123,9 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict) -> None:
-    HOME.mkdir(parents=True, exist_ok=True)
+    HOME.mkdir(mode=0o700, parents=True, exist_ok=True)
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2) + "\n")
+    CONFIG_PATH.chmod(0o600)  # may hold a Telegram bot token
 
 
 def stop_wait_minutes() -> int:

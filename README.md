@@ -59,6 +59,23 @@ back once to post it. Codex asks you to approve new hooks the first time it sees
   text to copy it (decyde does its own selection, since mouse mode takes over the
   terminal's).
 
+## On your phone
+
+Connect your own Telegram bot and questions reach your phone as messages, with a button
+for each option. Tap one, or reply to the message with your own answer; it is delivered
+to the agent like any other answer. If you answer on your computer instead, the Telegram
+message updates to match. `/open` lists what is waiting.
+
+```sh
+decyde telegram setup    # paste a token from @BotFather, then press Start in your bot
+decyde telegram off
+```
+
+Create a new bot for decyde rather than reusing one another app polls. Only the Telegram
+account that pressed Start can answer; anything from anyone else is ignored. Nothing on
+your machine listens for connections, but with Telegram on, the text of your questions
+and answers passes through Telegram's servers.
+
 ## Herdr sidebar
 
 While an agent has an open question, its row in Herdr's sidebar shows it in
