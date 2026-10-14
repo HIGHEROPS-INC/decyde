@@ -4,6 +4,13 @@ All notable changes to decyde. Versions follow [semantic versioning](https://sem
 each one is a [GitHub release](https://github.com/HIGHEROPS-INC/decyde/releases), and the
 installer and `decyde update` install the latest release.
 
+## [0.5.1] - 2026-10-14
+
+### Fixed
+- `decyde telegram setup` crashed while waiting for your Start message, and the server's
+  Telegram poller hit the same error: the HTTP timeout and Telegram's long-poll timeout
+  shared one argument name.
+
 ## [0.5.0] - 2026-10-13
 
 ### Added
@@ -128,6 +135,7 @@ installer and `decyde update` install the latest release.
   instructions for Claude Code, Codex, Grok and Gemini/Antigravity, and Claude Code hooks.
 - The curl installer at https://decyde.dev/install.
 
+[0.5.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.1
 [0.5.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.0
 [0.4.3]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.3
 [0.4.2]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.2

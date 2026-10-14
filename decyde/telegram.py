@@ -29,12 +29,12 @@ def settings() -> dict | None:
     return t if t and t.get("token") and t.get("chat_id") and t.get("user_id") else None
 
 
-def call(token: str, method: str, timeout: float = 15, **params) -> dict:
+def call(token: str, method: str, http_timeout: float = 15, **params) -> dict:
     data = urllib.parse.urlencode({k: json.dumps(v) if isinstance(v, (dict, list)) else v
                                    for k, v in params.items()}).encode()
     req = urllib.request.Request(API.format(token=token, method=method), data=data)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=http_timeout) as r:
             body = json.loads(r.read())
     except urllib.error.HTTPError as e:
         body = json.loads(e.read() or b"{}")
@@ -88,8 +88,8 @@ class Bot:
     def __init__(self, cfg: dict):
         self.token, self.chat_id, self.user_id = cfg["token"], int(cfg["chat_id"]), int(cfg["user_id"])
 
-    def api(self, method: str, **params):
-        return call(self.token, method, **params)
+    def api(self, method: str, http_timeout: float = 15, **params):
+        return call(self.token, method, http_timeout, **params)
 
     # outgoing: post new questions, close answered ones
     def sync(self, conn) -> None:
@@ -184,7 +184,7 @@ def run(stop: threading.Event) -> None:
             params = {"timeout": 25, "allowed_updates": ["message", "callback_query"]}
             if offset is not None:
                 params["offset"] = offset
-            for update in bot.api("getUpdates", timeout=35, **params):
+            for update in bot.api("getUpdates", http_timeout=35, **params):
                 offset = update["update_id"] + 1
                 try:
                     bot.handle(conn, update)
@@ -221,7 +221,7 @@ def cmd_setup(args) -> int:
         params = {"timeout": 20, "allowed_updates": ["message"]}
         if offset is not None:
             params["offset"] = offset
-        for u in call(token, "getUpdates", timeout=30, **params):
+        for u in call(token, "getUpdates", http_timeout=30, **params):
             offset = u["update_id"] + 1
             m = u.get("message") or {}
             if m.get("chat", {}).get("type") == "private" and m.get("from"):
