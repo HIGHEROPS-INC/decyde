@@ -110,6 +110,26 @@ td:first-child { color: var(--bright); white-space: nowrap; }
 .fact b { display: block; color: var(--t3); font-weight: 500; margin-bottom: 4px; }
 .fact span { color: var(--dim); font-size: 14px; }
 
+.tg { background: #0e1621; border: 1px solid var(--line); border-radius: 12px; padding: 14px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; line-height: 1.45; color: #e9edf1; }
+.tg .bar { display: flex; align-items: center; gap: 10px; padding: 0 2px 12px; border-bottom: 1px solid #1c2733; margin-bottom: 14px; }
+.tg .bar img { width: 34px; height: 34px; border-radius: 50%; }
+.tg .bar b { display: block; font-weight: 600; }
+.tg .bar span { color: #6d7f8f; font-size: 12.5px; }
+.tg .msg { background: #182533; border-radius: 12px 12px 12px 4px; padding: 10px 12px; max-width: 92%; }
+.tg .msg b { font-weight: 600; }
+.tg .msg i { color: #8ea3b5; }
+.tg .msg .h { display: block; margin-top: 8px; font-weight: 600; }
+.tg .btns { display: grid; gap: 4px; max-width: 92%; margin-top: 4px; }
+.tg .btns span { display: block; background: rgba(46,58,73,.85); border-radius: 8px; padding: 8px; text-align: center; font-size: 13.5px; }
+.tg .btns .tap { background: #3b2f6b; outline: 1px solid var(--p3); }
+.tg .reply { margin: 12px 0 0 auto; width: fit-content; max-width: 80%; background: #2b5278; border-radius: 12px 12px 4px 12px; padding: 8px 12px; }
+.phone-steps { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+.phone-steps li { counter-increment: s; position: relative; padding: 0 0 16px 34px; color: var(--dim); }
+.phone-steps li::before { content: counter(s); position: absolute; left: 0; top: 1px; width: 22px; height: 22px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line); color: var(--p3); font-size: 12px; text-align: center; line-height: 21px; }
+.phone-steps b { color: var(--bright); font-weight: 500; }
+.phone-note { color: var(--dim); font-size: 14px; border: 1px dashed var(--line); border-radius: 10px; padding: 14px 18px; margin-top: 22px; }
+.phone-note b { color: var(--text); font-weight: 500; }
+
 footer { border-top: 1px solid var(--line); padding: 34px 0 50px; color: var(--faint); font-size: 13px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 footer a { color: var(--dim); }
 
@@ -132,6 +152,7 @@ footer a { color: var(--dim); }
       <a href="#how" class="hide-sm">how it works</a>
       <a href="#asks" class="hide-sm">asks</a>
       <a href="#delivery" class="hide-sm">delivery</a>
+      <a href="#phone" class="hide-sm">phone</a>
       <a href="https://github.com/HIGHEROPS-INC/decyde">github</a>
     </div>
   </nav>
@@ -263,6 +284,32 @@ footer a { color: var(--dim); }
     </table>
   </section>
 
+  <section id="phone">
+    <h2>Answering from your phone</h2>
+    <p class="lede">Connect your own Telegram bot and questions follow you out the door. Tap an option and the answer reaches the agent the same way it would from your desk.</p>
+    <div class="toggle">
+      <div class="tg" aria-label="A decyde question in Telegram">
+        <div class="bar"><img src="decyde-mark.svg" alt=""><div><b>decyde</b><span>bot</span></div></div>
+        <div class="msg">🔴 <b>Blocking</b><br>
+          <b>#12 Keep webhooks in Edge?</b><br>
+          <i>codex · Codex, billing lane · payments-api (feat/webhooks)</i><br>
+          Move the Stripe webhooks to a Next.js route or keep them in Supabase Edge Functions?
+          <span class="h">Recommends</span>Keep: no cold-start difference and one less migration.</div>
+        <div class="btns"><span class="tap">1. Keep in Edge Functions</span><span>2. Move to Next.js route</span><span>Dismiss</span></div>
+        <div class="reply">Keep them, but add retries</div>
+      </div>
+      <div>
+        <ol class="phone-steps">
+          <li><b>Create a bot.</b> In Telegram, message <a href="https://t.me/BotFather">@BotFather</a>, send <code>/newbot</code> and pick a name. Use a new bot just for decyde; a bot another app already reads won't work.</li>
+          <li><b>Connect it.</b> Run <code>decyde telegram setup</code> and paste the token BotFather gives you.</li>
+          <li><b>Press Start.</b> Open the link it prints on your phone and press Start. That account becomes the only one that can answer.</li>
+        </ol>
+        <p><b>Answer how you like.</b> Tap an option, or reply to the message with your own words. <code>/open</code> lists what is still waiting. When a question is answered on your Mac or withdrawn, its message updates and the buttons go away.</p>
+        <p class="phone-note"><b>Your bot, your machine.</b> decyde reaches out to Telegram and nothing reaches in, so no port opens on your computer. Question text does pass through Telegram while it is connected. <code>decyde telegram off</code> disconnects it.</p>
+      </div>
+    </div>
+  </section>
+
   <section>
     <h2>Local by default</h2>
     <p class="lede">Your questions and answers stay on your machine unless you connect a phone. There is no account, no cloud service and no telemetry. Without a phone connected, the one outbound request is a daily check of the latest version number on GitHub, which you can turn off with <code>decyde config update_check off</code>.</p>
@@ -272,7 +319,7 @@ footer a { color: var(--dim); }
       <div class="fact"><b>Python standard library</b><span>No packages to install, nothing to audit beyond the repo.</span></div>
       <div class="fact"><b>Reversible setup</b><span><code>decyde uninstall</code> removes the service, the agent instructions and the hooks it added.</span></div>
       <div class="fact"><b>Updates in one command</b><span>Both views tell you when a new version is out. <code>decyde update</code> installs it and refreshes your agents' instructions and hooks.</span></div>
-      <div class="fact"><b>Answer from your phone</b><span>Connect your own Telegram bot with <code>decyde telegram setup</code>. Questions arrive with a button per option, and only your account can answer. Question text then passes through Telegram.</span></div>
+      <div class="fact"><b>Answer from your phone</b><span>Optional. Connect your own Telegram bot with <code>decyde telegram setup</code> (<a href="#phone">how</a>). Question text then passes through Telegram.</span></div>
       <div class="fact"><b>Open source</b><span>MIT licensed. Read it, fork it, or send a pull request on GitHub.</span></div>
     </div>
   </section>
