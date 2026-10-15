@@ -10,14 +10,22 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import sys
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 from decyde.store import connect, get_question, load_config, now, save_config
+
+PHOTO = Path(__file__).parent / "assets" / "telegram-photo.jpg"
+SHORT_DESCRIPTION = "Your coding agents ask. You decide. decyde.dev"
+DESCRIPTION = ("decyde sends you the questions your coding agents need you to answer. Tap an option or "
+               "reply with your own words, and the answer goes straight back to the agent. Only the "
+               "account that set up this bot can answer.")
 
 API = "https://api.telegram.org/bot{token}/{method}"
 MAX_TEXT = 3800          # Telegram allows 4096; leave room for the status line
@@ -29,10 +37,20 @@ def settings() -> dict | None:
     return t if t and t.get("token") and t.get("chat_id") and t.get("user_id") else None
 
 
-def call(token: str, method: str, http_timeout: float = 15, **params) -> dict:
-    data = urllib.parse.urlencode({k: json.dumps(v) if isinstance(v, (dict, list)) else v
-                                   for k, v in params.items()}).encode()
-    req = urllib.request.Request(API.format(token=token, method=method), data=data)
+def call(token: str, method: str, http_timeout: float = 15, files: dict | None = None, **params) -> dict:
+    fields = {k: json.dumps(v) if isinstance(v, (dict, list)) else str(v) for k, v in params.items()}
+    if files:  # multipart upload: files maps a field name to (filename, bytes, content type)
+        boundary = os.urandom(12).hex()
+        parts = [f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
+                 for k, v in fields.items()]
+        parts += [f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"; filename="{name}"\r\n'
+                  f"Content-Type: {ctype}\r\n\r\n".encode() + body + b"\r\n"
+                  for k, (name, body, ctype) in files.items()]
+        data = b"".join(parts) + f"--{boundary}--\r\n".encode()
+        headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+    else:
+        data, headers = urllib.parse.urlencode(fields).encode(), {}
+    req = urllib.request.Request(API.format(token=token, method=method), data=data, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=http_timeout) as r:
             body = json.loads(r.read())
@@ -202,6 +220,30 @@ def restart_server() -> None:
     restart_service()
 
 
+def brand(token: str, bot_id: int) -> list[str]:
+    """Give the bot decyde's photo and description, but only where the bot has none yet,
+    so nothing its owner chose is replaced. Returns what was set; failures are not fatal."""
+    done = []
+    steps = (
+        ("photo", lambda: call(token, "getUserProfilePhotos", user_id=bot_id, limit=1)["total_count"] == 0,
+         lambda: call(token, "setMyProfilePhoto", http_timeout=60,
+                      photo={"type": "static", "photo": "attach://decyde_photo"},
+                      files={"decyde_photo": ("decyde.jpg", PHOTO.read_bytes(), "image/jpeg")})),
+        ("description", lambda: not call(token, "getMyDescription").get("description"),
+         lambda: call(token, "setMyDescription", description=DESCRIPTION)),
+        ("about text", lambda: not call(token, "getMyShortDescription").get("short_description"),
+         lambda: call(token, "setMyShortDescription", short_description=SHORT_DESCRIPTION)),
+    )
+    for name, empty, apply in steps:
+        try:
+            if empty():
+                apply()
+                done.append(name)
+        except (RuntimeError, OSError, KeyError) as e:
+            print(f"Could not set the bot's {name} ({e}); set it in @BotFather if you like.", file=sys.stderr)
+    return done
+
+
 def cmd_setup(args) -> int:
     cfg = load_config()
     if cfg.pop("telegram", None):
@@ -214,6 +256,9 @@ def cmd_setup(args) -> int:
         print(f"That token did not work: {e}", file=sys.stderr)
         return 1
     call(token, "deleteWebhook")
+    branded = brand(token, bot["id"])
+    if branded:
+        print(f"Gave the bot decyde's {' and '.join(branded)}.")
     print(f"Connected to @{bot['username']}. Open https://t.me/{bot['username']} on your phone and press Start.")
     print("Waiting for your message (5 minutes)...")
     deadline, offset = time.time() + 300, None

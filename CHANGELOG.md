@@ -4,6 +4,12 @@ All notable changes to decyde. Versions follow [semantic versioning](https://sem
 each one is a [GitHub release](https://github.com/HIGHEROPS-INC/decyde/releases), and the
 installer and `decyde update` install the latest release.
 
+## [0.5.2] - 2026-10-15
+
+### Added
+- `decyde telegram setup` gives the bot decyde's photo, description and about text, but
+  only the ones it does not have yet, so anything set in @BotFather stays as it is.
+
 ## [0.5.1] - 2026-10-14
 
 ### Fixed
@@ -135,6 +141,7 @@ installer and `decyde update` install the latest release.
   instructions for Claude Code, Codex, Grok and Gemini/Antigravity, and Claude Code hooks.
 - The curl installer at https://decyde.dev/install.
 
+[0.5.2]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.2
 [0.5.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.1
 [0.5.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.0
 [0.4.3]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.4.3

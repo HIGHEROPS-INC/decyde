@@ -71,7 +71,9 @@ decyde telegram setup    # paste a token from @BotFather, then press Start in yo
 decyde telegram off
 ```
 
-Create a new bot for decyde rather than reusing one another app polls. Only the Telegram
+Create a new bot for decyde rather than reusing one another app polls. Setup gives the
+bot decyde's photo and description if it has none yet; anything you set yourself in
+@BotFather is left alone. Only the Telegram
 account that pressed Start can answer; anything from anyone else is ignored. Nothing on
 your machine listens for connections, but with Telegram on, the text of your questions
 and answers passes through Telegram's servers.
