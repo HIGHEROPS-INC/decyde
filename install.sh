@@ -26,7 +26,14 @@ fi
 say "downloading $REPO@$REF"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$REF" | tar -xz -C "$TMP" --strip-components=1
+# A release's own tarball (GitHub counts these downloads, which is how installs are counted);
+# a branch, or a release without one, comes from the source archive instead.
+ASSET="https://github.com/$REPO/releases/download/$REF/decyde-${REF#v}.tar.gz"
+curl -fsSL -o "$TMP/decyde.tar.gz" "$ASSET" 2>/dev/null ||
+  curl -fsSL -o "$TMP/decyde.tar.gz" "https://codeload.github.com/$REPO/tar.gz/$REF" ||
+  die "could not download $REPO@$REF"
+tar -xzf "$TMP/decyde.tar.gz" -C "$TMP" --strip-components=1
+rm -f "$TMP/decyde.tar.gz"
 [ -f "$TMP/bin/decyde" ] || die "download did not contain bin/decyde"
 
 mkdir -p "$(dirname "$DEST")"

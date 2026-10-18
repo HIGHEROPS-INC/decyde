@@ -33,5 +33,8 @@ NOTES=$(awk -v v="$VERSION" '
 
 git tag -a "$TAG" -m "decyde $VERSION" "$TARGET"
 git push -q origin "$TAG"
-printf '%s\n' "$NOTES" | gh release create "$TAG" --title "decyde $VERSION" --notes-file - --verify-tag
+# The installer downloads this file, so its download count is the install count.
+ASSET="$(mktemp -d)/decyde-$VERSION.tar.gz"
+git archive --format=tar.gz --prefix="decyde-$VERSION/" -o "$ASSET" "$TAG"
+printf '%s\n' "$NOTES" | gh release create "$TAG" "$ASSET" --title "decyde $VERSION" --notes-file - --verify-tag
 echo "released $TAG"
