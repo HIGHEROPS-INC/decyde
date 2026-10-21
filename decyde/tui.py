@@ -186,6 +186,8 @@ def tui(show_splash: bool = True) -> None:
             add("question", q["question"], curses.A_BOLD)
             if q["context"]:
                 add("context", q["context"])
+            if q["why"]:
+                add("why this matters", q["why"])
             if q["options"]:
                 tip = "  (click one to answer with it)" if q["status"] == "open" else ""
                 lines.append(("## options" + tip, C["teal2"], None))

@@ -4,6 +4,18 @@ All notable changes to decyde. Versions follow [semantic versioning](https://sem
 each one is a [GitHub release](https://github.com/HIGHEROPS-INC/decyde/releases), and the
 installer and `decyde update` install the latest release.
 
+## [0.6.0] - 2026-10-21
+
+### Added
+- **Why this matters**: `decyde ask --why` takes at most two sentences on the most
+  important reason for the ask. It shows under Context in the web inbox, the TUI and
+  Telegram.
+
+### Changed
+- The agent protocol asks for short, plain context with only the facts that change the
+  decision, and for `--why` on every ask. `decyde update` refreshes the instructions
+  your agents already have.
+
 ## [0.5.2] - 2026-10-15
 
 ### Added
@@ -141,6 +153,7 @@ installer and `decyde update` install the latest release.
   instructions for Claude Code, Codex, Grok and Gemini/Antigravity, and Claude Code hooks.
 - The curl installer at https://decyde.dev/install.
 
+[0.6.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.6.0
 [0.5.2]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.2
 [0.5.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.1
 [0.5.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.0

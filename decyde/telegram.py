@@ -75,6 +75,8 @@ def render(q: dict) -> str:
              f"Working on: {esc(q['task'])}", "", esc(q["question"])]
     if q.get("context"):
         parts += ["", f"<b>Context</b>\n{esc(q['context'])}"]
+    if q.get("why"):
+        parts += ["", f"<b>Why this matters</b>\n{esc(q['why'])}"]
     if q.get("options"):
         parts += ["", "<b>Options</b>"] + [f"{i}. {esc(o)}" for i, o in enumerate(q["options"], 1)]
     if q.get("recommendation"):

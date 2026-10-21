@@ -123,12 +123,12 @@ def cmd_ask(args) -> int:
     cur = conn.execute(
         "INSERT INTO questions (created_at, updated_at, agent, agent_name, task, project, cwd, git_branch, "
         "herdr_pane, tmux_pane, tmux_socket, session_id, inbox_socket, inbox_token, codex_thread, title, "
-        "question, context, options, recommendation, urgency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "question, context, why, options, recommendation, urgency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (ts, ts, agent, args.name, args.task, args.project or Path(cwd).name.strip(), cwd, git_branch(cwd),
          herdr, tmux_pane, tmux_socket, env.get("GROK_SESSION_ID") or env.get("CODEX_THREAD_ID"),
          env.get("CLAUDE_CODE_MESSAGING_SOCKET"), env.get("CLAUDE_CODE_MESSAGING_TOKEN"),
          env.get("CODEX_THREAD_ID"), args.title, args.question,
-         args.context, json.dumps(args.option) if args.option else None, args.recommend, args.urgency),
+         args.context, args.why, json.dumps(args.option) if args.option else None, args.recommend, args.urgency),
     )
     qid = cur.lastrowid
     if env.get("CLAUDE_CODE_MESSAGING_SOCKET") and not herdr and not tmux_pane:
@@ -315,6 +315,7 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--title", required=True, help="one-line summary of the decision")
     a.add_argument("--question", required=True, help="the full question")
     a.add_argument("--context", help="background needed to decide")
+    a.add_argument("--why", help="why this matters, in at most two sentences")
     a.add_argument("--option", action="append", help="a choice (repeatable)")
     a.add_argument("--recommend", help="your recommended choice and why")
     a.add_argument("--urgency", choices=URGENCIES, default="normal", help="high = you are blocked until answered")

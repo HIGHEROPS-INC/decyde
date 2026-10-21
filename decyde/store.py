@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS questions (
   title           TEXT NOT NULL,
   question        TEXT NOT NULL,
   context         TEXT,
+  why             TEXT,                   -- at most two sentences: why the ask matters
   options         TEXT,                   -- JSON array of strings
   recommendation  TEXT,
   urgency         TEXT NOT NULL DEFAULT 'normal',
@@ -65,7 +66,7 @@ CREATE TABLE IF NOT EXISTS sessions (     -- agent sessions that turned decyde o
 );
 """
 LATE_COLUMNS = ("tmux_pane", "tmux_socket", "session_id", "inbox_socket", "inbox_token", "codex_thread",
-                "waiter_pid", "relay_pid")
+                "waiter_pid", "relay_pid", "why")
 
 
 def now() -> str:

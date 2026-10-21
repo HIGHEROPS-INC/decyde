@@ -42,11 +42,20 @@ decyde ask --agent claude|codex|grok|antigravity|gemini|other \\
   --task "<what you are working on right now>" \\
   --title "<one-line summary of the decision>" \\
   --question "<the full question>" \\
-  --context "<what {name} needs to know to decide>" \\
+  --context "<only what {name} needs to know to decide>" \\
+  --why "<at most two sentences: the most important reason this ask matters>" \\
   --option "<choice A>" --option "<choice B>" \\
   --recommend "<your pick and why>" \\
   --urgency high    # only if you are fully blocked; otherwise omit (normal) or use low
 ```
+
+**Keep context short.** {name} reads it between other work, as an engineer or as a
+vibe coder, so write for both: plain words, only the facts that change the decision.
+Leave out history, step-by-step detail and anything {name} does not need to choose. A
+few short sentences or bullets is usually enough.
+
+**Always include `--why`**: at most two sentences giving the single most important
+reason this ask matters, such as what it blocks, what breaks or what it costs.
 
 It prints a question number, e.g. `#12`. Run it from your project directory so the
 project, git branch and terminal pane are captured automatically.

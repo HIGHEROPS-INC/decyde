@@ -210,6 +210,7 @@ function card(q, fresh) {
       <div class="who">${who}</div>
       <div class="label">question</div><div class="text">${esc(q.question)}</div>
       ${q.context ? `<div class="label">context</div><div class="text ctx">${esc(q.context)}</div>` : ""}
+      ${q.why ? `<div class="label">why this matters</div><div class="text ctx">${esc(q.why)}</div>` : ""}
       ${opts}
       ${q.recommendation ? `<div class="label">agent recommends</div><div class="rec">${esc(q.recommendation)}</div>` : ""}
       ${tail}

@@ -108,6 +108,8 @@ Both UIs show whether each answer was delivered and acknowledged.
 decyde ask --agent codex --name "Codex, billing lane" --task "Stripe webhook refactor" \
   --title "Keep webhooks in Edge Functions?" \
   --question "Move the Stripe webhooks to a Next.js route or keep them in Supabase Edge Functions?" \
+  --context "Both work today. The route would add a cold start; Edge Functions already have the secrets." \
+  --why "Payments stop if webhooks break, and the refactor can't continue until this is settled." \
   --option "Keep in Edge Functions" --option "Move to Next.js route" \
   --recommend "Keep: no cold-start difference and one less migration" --urgency high
 decyde check 12      # exit 0 answered, 2 still open, 3 dismissed
