@@ -4,6 +4,13 @@ All notable changes to decyde. Versions follow [semantic versioning](https://sem
 each one is a [GitHub release](https://github.com/HIGHEROPS-INC/decyde/releases), and the
 installer and `decyde update` install the latest release.
 
+## [0.6.1] - 2026-10-21
+
+### Changed
+- The question list in the TUI and the web inbox shows the agent's name (`--name`, e.g.
+  "Claude, HigherDeal lead") instead of only its type, still coloured by type. Asks
+  without a name show the type as before.
+
 ## [0.6.0] - 2026-10-21
 
 ### Added
@@ -153,6 +160,7 @@ installer and `decyde update` install the latest release.
   instructions for Claude Code, Codex, Grok and Gemini/Antigravity, and Claude Code hooks.
 - The curl installer at https://decyde.dev/install.
 
+[0.6.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.6.1
 [0.6.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.6.0
 [0.5.2]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.2
 [0.5.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.1

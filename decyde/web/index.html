@@ -62,7 +62,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 18px 16px 80px; }
 
 .head { display: flex; gap: 10px; align-items: baseline; padding: 11px 14px; cursor: pointer; flex-wrap: wrap; }
 .id { color: var(--faint); }
-.agent { font-weight: 700; text-transform: lowercase; }
+.agent { font-weight: 700; max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .title { color: #e6edf3; font-weight: 500; flex: 1 1 320px; min-width: 0; }
 .meta { color: var(--dim); white-space: nowrap; }
 .pill { font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
@@ -200,7 +200,7 @@ function card(q, fresh) {
   return `<article class="${cls}" id="q${q.id}">
     <div class="head" data-toggle="${q.id}">
       <span class="id">#${q.id}</span>
-      <span class="agent" style="color:var(--${["claude","codex","grok","antigravity","gemini"].includes(q.agent) ? q.agent : "other"})">${esc(q.agent)}</span>
+      <span class="agent" style="color:var(--${["claude","codex","grok","antigravity","gemini"].includes(q.agent) ? q.agent : "other"})">${esc(q.agent_name || q.agent)}</span>
       <span class="title">${esc(q.title)}</span>
       ${q.urgency === "high" && isOpen ? `<span class="pill high">blocking</span>` : ""}
       <span class="pill ${q.status}">${q.status}</span>
@@ -262,7 +262,7 @@ function chime() {
 function alertNew(qs) {
   chime();
   if ("Notification" in window && Notification.permission === "granted" && document.hidden)
-    for (const q of qs) new Notification(`${q.agent} needs a decision`, { body: q.title, tag: "dhub" + q.id });
+    for (const q of qs) new Notification(`${q.agent_name || q.agent} needs a decision`, { body: q.title, tag: "dhub" + q.id });
 }
 if ("Notification" in window && Notification.permission === "default") {
   const b = $("#notif-btn"); b.hidden = false;

@@ -250,7 +250,12 @@ def tui(show_splash: bool = True) -> None:
             st["list"] = (first, first + list_h)
             if not items:
                 put(first + 1, 3, "all clear. no agent is waiting on you." if st["view"] == 0 else "nothing here yet.", C["dim"])
-            for row, q in enumerate(items[st["scroll"]:st["scroll"] + list_h]):
+            shown = items[st["scroll"]:st["scroll"] + list_h]
+            who = lambda q: q["agent_name"] or q["agent"]
+            # the name column fits the longest name on screen, without crowding out titles
+            name_w = max([11] + [len(who(q)) for q in shown])
+            name_w = min(name_w, max(11, min(26, (W - 40) // 2)))
+            for row, q in enumerate(shown):
                 y, idx = first + row, st["scroll"] + row
                 selected = idx == st["sel"]
                 blocking = q["status"] == "open" and q["urgency"] == "high"
@@ -262,9 +267,10 @@ def tui(show_splash: bool = True) -> None:
                 put(y, 0, "▶" if selected else " ", C["teal3"] | base)
                 put(y, 2, "!" if blocking else "●", color | base)
                 put(y, 4, f"#{q['id']:<4}", C["faint"] | base if not selected else base)
-                put(y, 10, f"{q['agent'][:11]:<11}", (C.get(q["agent"], C["other"]) | curses.A_BOLD) if not selected else base | curses.A_BOLD)
-                put(y, 23, f"{age(q['created_at']):>4}", C["dim"] | base if not selected else base)
-                put(y, 29, q["title"], base | (curses.A_BOLD if selected else 0), W - 30)
+                name = who(q) if len(who(q)) <= name_w else who(q)[:name_w - 1] + "…"
+                put(y, 10, f"{name:<{name_w}}", (C.get(q["agent"], C["other"]) | curses.A_BOLD) if not selected else base | curses.A_BOLD)
+                put(y, 12 + name_w, f"{age(q['created_at']):>4}", C["dim"] | base if not selected else base)
+                put(y, 18 + name_w, q["title"], base | (curses.A_BOLD if selected else 0), W - 19 - name_w)
                 st["hits"].append((y, 0, W, ("sel", idx)))
             top = first + list_h
             put(top, 0, "─" * W, C["faint"])
