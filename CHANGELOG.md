@@ -4,6 +4,12 @@ All notable changes to decyde. Versions follow [semantic versioning](https://sem
 each one is a [GitHub release](https://github.com/HIGHEROPS-INC/decyde/releases), and the
 installer and `decyde update` install the latest release.
 
+## [0.7.1] - 2026-11-17
+
+### Changed
+- The web inbox shows the decyde logo from the terminal in its header, with the same
+  purple gradient and glint.
+
 ## [0.7.0] - 2026-11-17
 
 ### Added
@@ -172,6 +178,7 @@ installer and `decyde update` install the latest release.
   instructions for Claude Code, Codex, Grok and Gemini/Antigravity, and Claude Code hooks.
 - The curl installer at https://decyde.dev/install.
 
+[0.7.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.7.1
 [0.7.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.7.0
 [0.6.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.6.1
 [0.6.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.6.0
