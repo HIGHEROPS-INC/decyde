@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS questions (
   urgency         TEXT NOT NULL DEFAULT 'normal',
   status          TEXT NOT NULL DEFAULT 'open',  -- open | answered | acknowledged | cancelled
   answer          TEXT,
+  attachments     TEXT,                   -- JSON array of images sent with the answer: {path, from}
   answered_at     TEXT,
   delivery        TEXT,                   -- pending | pushed via ... | skipped: ... | failed: ...
   delivered_at    TEXT,
@@ -66,7 +67,7 @@ CREATE TABLE IF NOT EXISTS sessions (     -- agent sessions that turned decyde o
 );
 """
 LATE_COLUMNS = ("tmux_pane", "tmux_socket", "session_id", "inbox_socket", "inbox_token", "codex_thread",
-                "waiter_pid", "relay_pid", "why")
+                "waiter_pid", "relay_pid", "why", "attachments")
 
 
 def now() -> str:
@@ -92,6 +93,7 @@ def row_dict(row: sqlite3.Row | None) -> dict | None:
         return None
     d = dict(row)
     d["options"] = json.loads(d["options"]) if d.get("options") else []
+    d["attachments"] = json.loads(d["attachments"]) if d.get("attachments") else []
     return d
 
 

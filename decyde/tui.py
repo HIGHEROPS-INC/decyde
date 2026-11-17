@@ -3,15 +3,17 @@ from __future__ import annotations
 
 import base64
 import os
+import re
 import shutil
 import socket
 import subprocess
 import sys
 import time
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
-from decyde import __version__, splash, update
+from decyde import __version__, attachments, splash, update
 from decyde.delivery import dismiss_question, record_answer
 from decyde.store import PORT, change_marker, connect, get_question, human_name, load_config, row_dict
 
@@ -35,6 +37,14 @@ def tui(show_splash: bool = True) -> None:
         sys.stdout.flush()
 
     def run(scr):
+        try:  # Ctrl+V pastes an image; BSD terminals would otherwise keep it as "literal next"
+            import termios
+            fd = sys.stdin.fileno()
+            attrs = termios.tcgetattr(fd)
+            attrs[6][termios.VLNEXT] = bytes([os.fpathconf(fd, "PC_VDISABLE")])
+            termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        except Exception:  # not a tty we can adjust: Ctrl+V may not arrive, the rest works
+            pass
         curses.curs_set(0)
         curses.use_default_colors()
         scr.keypad(False)
@@ -199,6 +209,8 @@ def tui(show_splash: bool = True) -> None:
                 add("agent recommends", q["recommendation"], C["purple4"])
             if q["status"] != "open":
                 add("your answer" if q["status"] != "cancelled" else "closed", q["answer"], C["teal3"])
+                for i, a in enumerate(q["attachments"], 1):
+                    add(None, f"[Image #{i}] {a['path']}", C["dim"])
                 if q["delivery"]:
                     lines.append((f"delivery: {q['delivery']}" + (" · acknowledged" if q["acknowledged_at"] else ""),
                                   C["dim"], None))
@@ -307,7 +319,7 @@ def tui(show_splash: bool = True) -> None:
                 x = button(h - 2, x, "▲ prev", ("move", -1))
                 x = button(h - 2, x, "▼ next", ("move", 1))
                 button(h - 2, max(x, W - 9), "quit", ("quit",))
-                hint = "click or ↑↓ to browse · wheel scrolls · drag to copy · a answer · e editor · o option · d dismiss"
+                hint = "click or ↑↓ to browse · wheel scrolls · drag to copy · a answer (ctrl+v adds an image) · e editor · o option · d dismiss"
                 put(h - 1, 1, st["flash"] or hint, C["teal3"] if st["flash"] else C["faint"], W - 2)
             for y, x0, x1 in selection_spans():
                 try:
@@ -344,16 +356,22 @@ def tui(show_splash: bool = True) -> None:
 
         # ---- prompts
 
-        def prompt_line(label, init=""):
-            """One-line editor on the bottom row. Enter or [send] sends, Esc or [cancel] cancels."""
+        def prompt_line(label, init="", qid=None, files=None):
+            """One-line editor on the bottom row. Enter or [send] sends, Esc or [cancel] cancels.
+            With `files` (answers only), Ctrl+V adds the clipboard image and a dropped image
+            file is taken in; each shows as [Image #N] and is recorded in `files`."""
             buf = init
+            note = ""
             curses.curs_set(1)
             try:
                 while True:
                     def bar(h):
                         W = scr.getmaxyx()[1]
                         x = button(h - 2, 1, "send ⏎", ("send",), C["btnhot"])
-                        button(h - 2, x, "cancel esc", ("cancel",))
+                        x = button(h - 2, x, "cancel esc", ("cancel",))
+                        if files is not None:
+                            put(h - 2, x + 1, note or "ctrl+v pastes an image · drop an image file to attach it",
+                                C["teal3"] if note else C["faint"], W - x - 2)
                         shown = buf[-(W - len(label) - 4):]
                         put(h - 1, 1, label, C["purple3"] | curses.A_BOLD)
                         put(h - 1, 1 + len(label), shown)
@@ -376,12 +394,41 @@ def tui(show_splash: bool = True) -> None:
                         return buf.strip() or None
                     if k == "esc":
                         return None
+                    note = ""
                     if k == "backspace":
-                        buf = buf[:-1]
+                        whole = re.search(r"\[Image #(\d+)\] ?$", buf) if files else None
+                        if whole and int(whole[1]) in files:  # an image goes in one keystroke
+                            attachments.discard([files.pop(int(whole[1]))])
+                            buf = buf[:whole.start()]
+                        else:
+                            buf = buf[:-1]
                     elif k == "\x15":  # Ctrl-U
                         buf = ""
-                    elif len(k) == 1 and k.isprintable():
+                    elif k == "\x16" and files is not None:  # Ctrl-V
+                        if len(files) >= attachments.MAX_IMAGES:
+                            note = f"an answer takes at most {attachments.MAX_IMAGES} images"
+                            continue
+                        data = attachments.clipboard_image()
+                        try:
+                            saved = attachments.save(qid, data) if data else None
+                        except (OSError, ValueError) as e:
+                            note = f"could not attach: {e}"
+                            continue
+                        if not saved:
+                            note = "no image on the clipboard"
+                            continue
+                        n = max(files, default=0) + 1
+                        files[n] = attachments.entry(saved)
+                        buf += ("" if not buf or buf.endswith(" ") else " ") + f"[Image #{n}] "
+                        note = f"attached image {n}"
+                    # macOS screenshot names hold a narrow no-break space, which is not "printable"
+                    elif len(k) == 1 and (k.isprintable() or unicodedata.category(k) == "Zs"):
                         buf += k
+                        if files is not None and attachments.EXT_END.search(buf):
+                            had = len(files)
+                            buf = attachments.absorb_paths(qid, buf, files)
+                            if len(files) > had:
+                                note = f"attached image {max(files)}"
             finally:
                 curses.curs_set(0)
 
@@ -416,15 +463,25 @@ def tui(show_splash: bool = True) -> None:
             os.unlink(path)
             return text or None
 
-        def send(q, text):
+        def compose(q, init=""):
+            files = {}
+            send(q, prompt_line(f"#{q['id']} > ", init, q["id"], files), files)
+
+        def send(q, text, files=None):
+            files = {} if files is None else files
             if not text:
+                attachments.discard(files.values())
                 st["flash"] = "cancelled"
                 return
             if get_question(conn, q["id"])["status"] == "cancelled":
+                attachments.discard(files.values())
                 st["flash"] = f"#{q['id']} was withdrawn by the agent"
                 return
-            record_answer(conn, q["id"], text, deliver_now=False)
-            st["flash"] = f"answered #{q['id']} · decyde is delivering it to the agent"
+            text = attachments.absorb_paths(q["id"], text, files)  # paths typed in the editor
+            text, images = attachments.finalize(text, files)
+            record_answer(conn, q["id"], text, deliver_now=False, attachments=images)
+            st["flash"] = f"answered #{q['id']}" + (f" with {len(images)} image{'s' * (len(images) > 1)}" if images else "") \
+                + " · decyde is delivering it to the agent"
 
         # ---- actions
 
@@ -442,11 +499,11 @@ def tui(show_splash: bool = True) -> None:
             elif q is None or q["status"] != "open":
                 pass
             elif kind == "answer":
-                send(q, prompt_line(f"#{q['id']} > "))
+                compose(q)
             elif kind == "editor":
                 send(q, editor_answer(q))
             elif kind == "opt":
-                send(q, prompt_line(f"#{q['id']} > ", q["options"][action[1]]))
+                compose(q, q["options"][action[1]])
             elif kind == "pickopt" and q["options"]:
                 pick = prompt_line(f"option 1-{len(q['options'])} > ")
                 if pick and pick.isdigit() and 1 <= int(pick) <= len(q["options"]):

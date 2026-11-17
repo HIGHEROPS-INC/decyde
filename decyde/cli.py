@@ -34,7 +34,8 @@ def print_q(q: dict, as_json: bool) -> None:
         return
     print(f"#{q['id']} [{q['status']}] {q['title']}")
     if q["status"] in ("answered", "acknowledged"):
-        print(f"ANSWER: {q['answer']}")
+        from decyde.attachments import note
+        print(f"ANSWER: {q['answer']}{note(q)}")
     elif q["status"] == "cancelled":
         print(f"CANCELLED: {q.get('answer') or 'withdrawn'}")
     else:

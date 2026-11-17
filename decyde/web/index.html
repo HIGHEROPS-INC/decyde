@@ -92,6 +92,13 @@ textarea:focus { border-color: #6d5bd0; box-shadow: 0 0 0 1px #6d5bd0; }
 .actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
 .hint { color: var(--faint); margin-left: auto; }
 .answer { background: #0e1b1a; border: 1px solid #1d3d3a; border-radius: 4px; padding: 9px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.thumbs:empty { display: none; }
+.thumb { position: relative; border: 1px solid var(--line); border-radius: 4px; background: #0a0d12; line-height: 0; }
+.thumb img { height: 72px; max-width: 160px; object-fit: cover; border-radius: 3px; display: block; }
+.thumb .n { position: absolute; left: 3px; bottom: 3px; font-size: 10px; line-height: 1.4; padding: 0 4px; border-radius: 3px; background: rgba(12,11,18,.8); color: var(--dim); }
+.thumb button { position: absolute; top: -7px; right: -7px; padding: 0 5px; line-height: 16px; border-radius: 9px; color: var(--dim); }
+.reply.drop textarea { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
 .delivery { color: var(--dim); margin-top: 6px; }
 .delivery b { color: var(--text); font-weight: 500; }
 
@@ -126,6 +133,8 @@ const TABS = [
   ["all", "history", () => true],
 ];
 let ME = "you", tab = "open", questions = [], expanded = new Set(), drafts = {}, known = null;
+const images = {};   // question id -> [{url, data}] waiting to go with the answer
+const MAX_IMAGES = 10, MAX_BYTES = 20 * 1024 * 1024;
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -190,12 +199,15 @@ function card(q, fresh) {
   let tail;
   if (isOpen) {
     tail = `<div class="reply"><div class="ps">${esc(ME.toLowerCase())} &gt; your call</div>
-      <textarea data-id="${q.id}" placeholder="Type your decision. ${q.options.length ? "Pick an option above or write your own. " : ""}Cmd+Enter to send.">${esc(drafts[q.id] || "")}</textarea>
+      <textarea data-id="${q.id}" placeholder="Type your decision. ${q.options.length ? "Pick an option above or write your own. " : ""}Paste or drop an image to attach it. Cmd+Enter to send.">${esc(drafts[q.id] || "")}</textarea>
+      <div class="thumbs" data-thumbs="${q.id}">${thumbs(q.id)}</div>
       <div class="actions"><button class="primary" data-send="${q.id}">send answer</button>
+      <button data-attach="${q.id}">attach image</button>
       <button class="ghost" data-dismiss="${q.id}">dismiss</button><span class="hint">Cmd+Enter sends</span></div></div>`;
   } else {
     const d = q.delivery ? `<div class="delivery">delivery: <b>${esc(q.delivery)}</b>${q.acknowledged_at ? ` · agent acknowledged ${ago(q.acknowledged_at)}` : ""}</div>` : "";
-    tail = `<div class="label">${q.status === "cancelled" ? "closed" : "your answer"}</div><div class="answer">${esc(q.answer)}</div>${d}`;
+    const pics = q.attachments.map((a, i) => `<a class="thumb" href="/api/questions/${q.id}/images/${i + 1}" target="_blank" title="${esc(a.path)}"><img src="/api/questions/${q.id}/images/${i + 1}" alt="Image ${i + 1}"><span class="n">#${i + 1}</span></a>`).join("");
+    tail = `<div class="label">${q.status === "cancelled" ? "closed" : "your answer"}</div><div class="answer">${esc(q.answer)}</div><div class="thumbs">${pics}</div>${d}`;
   }
   return `<article class="${cls}" id="q${q.id}">
     <div class="head" data-toggle="${q.id}">
@@ -218,31 +230,80 @@ function card(q, fresh) {
   </article>`;
 }
 
+// Images waiting to be sent with an answer: pasted, dropped or picked.
+function thumbs(id) {
+  return (images[id] || []).map((im, i) => `<span class="thumb"><img src="${im.url}" alt="Image ${i + 1}"><span class="n">#${i + 1}</span><button data-unattach="${id}" data-i="${i}" title="remove">x</button></span>`).join("");
+}
+function showThumbs(id) { const el = document.querySelector(`[data-thumbs="${id}"]`); if (el) el.innerHTML = thumbs(id); }
+function addImages(id, files) {
+  const list = images[id] = images[id] || [];
+  for (const f of files) {
+    if (!f.type.startsWith("image/") && !/\.(heic|heif)$/i.test(f.name || "")) continue;
+    if (list.length >= MAX_IMAGES) { alertInline(id, `an answer takes at most ${MAX_IMAGES} images`); break; }
+    if (f.size > MAX_BYTES) { alertInline(id, "that image is larger than 20 MB"); continue; }
+    const item = { url: URL.createObjectURL(f), data: null };
+    list.push(item);
+    const r = new FileReader();
+    r.onload = () => { item.data = r.result.slice(r.result.indexOf(",") + 1); };
+    r.readAsDataURL(f);
+  }
+  showThumbs(id);
+}
+const picker = Object.assign(document.createElement("input"), { type: "file", accept: "image/*,.heic,.heif", multiple: true });
+picker.onchange = () => { addImages(picker.dataset.id, picker.files); picker.value = ""; };
+
 async function post(id, action, body = {}) {
   const r = await fetch(`/api/questions/${id}/${action}`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body) });
   const res = await r.json();
-  if (!r.ok) { alertInline(id, res.error || "failed"); return; }
-  delete drafts[id];
+  if (!r.ok) { alertInline(id, res.error || "failed"); const b = document.querySelector(`[data-send="${id}"]`); if (b) b.disabled = false; return; }
+  delete drafts[id]; delete images[id];
   await load();
 }
 function alertInline(id, msg) {
   const a = document.querySelector(`#q${id} .actions`);
-  if (a) a.insertAdjacentHTML("beforeend", `<span style="color:var(--red)">${esc(msg)}</span>`);
+  if (!a) return;
+  a.querySelector(".err")?.remove();
+  a.insertAdjacentHTML("beforeend", `<span class="err" style="color:var(--red)">${esc(msg)}</span>`);
 }
 
 document.addEventListener("click", e => {
-  const t = e.target.closest("[data-tab],[data-toggle],[data-pick],[data-send],[data-dismiss]");
+  const t = e.target.closest("[data-tab],[data-toggle],[data-pick],[data-send],[data-dismiss],[data-attach],[data-unattach]");
   if (!t) return;
+  if (t.dataset.attach) { picker.dataset.id = t.dataset.attach; picker.click(); return; }
+  if (t.dataset.unattach) { images[t.dataset.unattach].splice(+t.dataset.i, 1); showThumbs(t.dataset.unattach); return; }
   if (t.dataset.tab) { tab = t.dataset.tab; render(); }
   else if (t.dataset.toggle) { const id = +t.dataset.toggle; expanded.has(id) ? expanded.delete(id) : expanded.add(id); document.getElementById("q" + id).classList.toggle("expanded"); }
   else if (t.dataset.pick) { const ta = document.querySelector(`textarea[data-id="${t.dataset.pick}"]`); ta.value = t.dataset.val; ta.focus(); }
-  else if (t.dataset.send) { const ta = document.querySelector(`textarea[data-id="${t.dataset.send}"]`); if (ta.value.trim()) { t.disabled = true; post(t.dataset.send, "answer", { answer: ta.value }); } else ta.focus(); }
+  else if (t.dataset.send) {
+    const id = t.dataset.send, ta = document.querySelector(`textarea[data-id="${id}"]`), pics = images[id] || [];
+    if (pics.some(im => !im.data)) alertInline(id, "still reading the image, try again in a moment");
+    else if (ta.value.trim() || pics.length) { t.disabled = true; post(id, "answer", { answer: ta.value, images: pics.map(im => im.data) }); }
+    else ta.focus();
+  }
   else if (t.dataset.dismiss) post(t.dataset.dismiss, "dismiss");
 });
 document.addEventListener("keydown", e => {
   if (e.target.matches("textarea[data-id]") && e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
     e.preventDefault(); document.querySelector(`[data-send="${e.target.dataset.id}"]`).click();
   }
+});
+
+// Attach images by pasting into an answer box or dropping onto it.
+document.addEventListener("paste", e => {
+  if (!e.target.matches("textarea[data-id]")) return;
+  const files = [...e.clipboardData.files].filter(f => f.type.startsWith("image/"));
+  if (files.length) { e.preventDefault(); addImages(e.target.dataset.id, files); }
+});
+document.addEventListener("dragover", e => {
+  const box = e.target.closest?.(".reply");
+  if (box && e.dataTransfer.types.includes("Files")) { e.preventDefault(); box.classList.add("drop"); }
+});
+document.addEventListener("dragleave", e => e.target.closest?.(".reply")?.classList.remove("drop"));
+document.addEventListener("drop", e => {
+  const box = e.target.closest?.(".reply");
+  if (!box || !e.dataTransfer.files.length) return;
+  e.preventDefault(); box.classList.remove("drop");
+  addImages(box.querySelector("textarea").dataset.id, e.dataTransfer.files);
 });
 
 // Alerts: chime + desktop notification when a new question lands while the tab is in the background.

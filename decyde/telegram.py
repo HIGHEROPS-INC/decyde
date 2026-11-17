@@ -19,15 +19,18 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from decyde import attachments
 from decyde.store import connect, get_question, load_config, now, save_config
 
 PHOTO = Path(__file__).parent / "assets" / "telegram-photo.jpg"
 SHORT_DESCRIPTION = "Your coding agents ask. You decide. decyde.dev"
 DESCRIPTION = ("decyde sends you the questions your coding agents need you to answer. Tap an option or "
-               "reply with your own words, and the answer goes straight back to the agent. Only the "
+               "reply with your own words or a photo, and the answer goes straight back to the agent. Only the "
                "account that set up this bot can answer.")
 
 API = "https://api.telegram.org/bot{token}/{method}"
+FILE = "https://api.telegram.org/file/bot{token}/{path}"
+ALBUM_SECONDS = 2        # photos sent together arrive as separate messages; wait this long for the rest
 MAX_TEXT = 3800          # Telegram allows 4096; leave room for the status line
 SYNC_SECONDS = 2
 
@@ -107,6 +110,8 @@ def closed_line(q: dict) -> str:
 class Bot:
     def __init__(self, cfg: dict):
         self.token, self.chat_id, self.user_id = cfg["token"], int(cfg["chat_id"]), int(cfg["user_id"])
+        self.albums: dict[str, dict] = {}
+        self.lock = threading.Lock()
 
     def api(self, method: str, http_timeout: float = 15, **params):
         return call(self.token, method, http_timeout, **params)
@@ -154,7 +159,7 @@ class Bot:
         msg = update.get("message") or {}
         if msg.get("from", {}).get("id") != self.user_id or msg.get("chat", {}).get("id") != self.chat_id:
             return
-        text = (msg.get("text") or "").strip()
+        text = (msg.get("text") or msg.get("caption") or "").strip()
         if text.startswith("/open") or text.startswith("/start"):
             self.list_open(conn)
             return
@@ -170,8 +175,57 @@ class Bot:
             self.api("sendMessage", chat_id=self.chat_id, reply_to_message_id=replied,
                      text=f"#{row['qid']} is already closed.")
             return
-        if text:
-            record_answer(conn, q["id"], text)
+        doc = msg.get("document") or {}
+        file_id = msg["photo"][-1]["file_id"] if msg.get("photo") else \
+            doc.get("file_id") if (doc.get("mime_type") or "").startswith("image/") else None
+        if not file_id:
+            if text:
+                record_answer(conn, q["id"], text)
+            return
+        try:
+            image = attachments.entry(attachments.save(q["id"], self.download(file_id)))
+        except (ValueError, RuntimeError, OSError) as e:
+            self.api("sendMessage", chat_id=self.chat_id, reply_to_message_id=msg.get("message_id"),
+                     text=f"Could not take that image: {e}. #{q['id']} is still open.")
+            return
+        album = msg.get("media_group_id")
+        if not album:
+            record_answer(conn, q["id"], text, attachments=[image])
+            return
+        with self.lock:  # answer once, when the whole album is in
+            a = self.albums.setdefault(album, {"qid": q["id"], "text": "", "images": [], "timer": None})
+            a["text"] = a["text"] or text
+            a["images"].append(image)
+            if a["timer"]:
+                a["timer"].cancel()
+            a["timer"] = threading.Timer(ALBUM_SECONDS, self.finish_album, [album])
+            a["timer"].daemon = True
+            a["timer"].start()
+
+    def download(self, file_id: str) -> bytes:
+        info = self.api("getFile", file_id=file_id)
+        if info.get("file_size", 0) > attachments.MAX_BYTES:
+            raise ValueError(f"the image is larger than {attachments.MAX_BYTES // 2 ** 20} MB")
+        with urllib.request.urlopen(FILE.format(token=self.token, path=info["file_path"]), timeout=60) as r:
+            return r.read()
+
+    def finish_album(self, album: str) -> None:
+        from decyde.delivery import record_answer
+        with self.lock:
+            a = self.albums.pop(album, None)
+        if not a:
+            return
+        try:
+            conn = connect()
+            q = get_question(conn, a["qid"])
+            if q and q["status"] == "open":
+                record_answer(conn, a["qid"], a["text"], background=False,
+                              attachments=a["images"][:attachments.MAX_IMAGES])
+                attachments.discard(a["images"][attachments.MAX_IMAGES:])
+            else:
+                attachments.discard(a["images"])
+        except Exception as e:
+            print(f"telegram album: {e}", file=sys.stderr, flush=True)
 
     def list_open(self, conn) -> None:
         rows = conn.execute("SELECT id, agent, title FROM questions WHERE status='open' ORDER BY id").fetchall()
@@ -279,7 +333,7 @@ def cmd_setup(args) -> int:
                 call(token, "getUpdates", offset=offset, timeout=0)  # don't replay the Start to the server
                 call(token, "sendMessage", chat_id=m["chat"]["id"],
                      text="decyde is connected. Questions from your agents will arrive here; tap an option "
-                          "or reply to a question to answer it. /open lists what is waiting.")
+                          "or reply to a question to answer it, with photos if you like. /open lists what is waiting.")
                 restart_server()
                 print(f"Done: questions now go to @{bot['username']}, and only your account can answer.")
                 return 0

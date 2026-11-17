@@ -4,6 +4,17 @@ All notable changes to decyde. Versions follow [semantic versioning](https://sem
 each one is a [GitHub release](https://github.com/HIGHEROPS-INC/decyde/releases), and the
 installer and `decyde update` install the latest release.
 
+## [0.7.0] - 2026-11-17
+
+### Added
+- **Images in answers.** In the TUI, Ctrl+V while typing an answer adds the image on the
+  clipboard and a dropped image file is attached; each shows as `[Image #1]`. The web
+  inbox takes pasted, dropped or picked images, and Telegram takes a photo reply (an
+  album counts as one answer). decyde saves the images under `~/.decyde/attachments/`
+  and gives the agent their paths to open, so they arrive on every delivery route. HEIC,
+  TIFF and BMP are converted to PNG on macOS. Images are deleted 30 days after the
+  question is settled.
+
 ## [0.6.1] - 2026-10-21
 
 ### Changed
@@ -160,6 +171,7 @@ installer and `decyde update` install the latest release.
   instructions for Claude Code, Codex, Grok and Gemini/Antigravity, and Claude Code hooks.
 - The curl installer at https://decyde.dev/install.
 
+[0.7.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.7.0
 [0.6.1]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.6.1
 [0.6.0]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.6.0
 [0.5.2]: https://github.com/HIGHEROPS-INC/decyde/releases/tag/v0.5.2

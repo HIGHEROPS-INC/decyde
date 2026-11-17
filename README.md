@@ -59,10 +59,24 @@ back once to post it. Codex asks you to approve new hooks the first time it sees
   text to copy it (decyde does its own selection, since mouse mode takes over the
   terminal's).
 
+### Images
+
+An answer can carry images, such as a screenshot of the bug or the layout you want.
+
+- **Terminal:** while typing an answer, Ctrl+V adds the image on the clipboard, and
+  dropping an image file into the terminal attaches it. Each shows as `[Image #1]`;
+  backspace removes it.
+- **Browser:** paste or drop an image into the answer box, or use "attach image".
+- **Telegram:** reply to the question with a photo, with or without a caption.
+
+decyde saves each image under `~/.decyde/attachments/` and gives the agent its path, which
+the agent opens with its own image tool. Up to 10 images of 20 MB each per answer, kept
+for 30 days after the question is settled.
+
 ## On your phone
 
 Connect your own Telegram bot and questions reach your phone as messages, with a button
-for each option. Tap one, or reply to the message with your own answer; it is delivered
+for each option. Tap one, or reply to the message with your own answer or a photo; it is delivered
 to the agent like any other answer. If you answer on your computer instead, the Telegram
 message updates to match. `/open` lists what is waiting.
 
@@ -76,7 +90,7 @@ bot decyde's photo and description if it has none yet; anything you set yourself
 @BotFather is left alone. Only the Telegram
 account that pressed Start can answer; anything from anyone else is ignored. Nothing on
 your machine listens for connections, but with Telegram on, the text of your questions
-and answers passes through Telegram's servers.
+and answers, and any photos you reply with, pass through Telegram's servers.
 
 ## Herdr sidebar
 

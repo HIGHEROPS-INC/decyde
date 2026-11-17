@@ -1,9 +1,13 @@
 """The web UI and its JSON/SSE API, bound to localhost only."""
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import queue
+import re
 import socket
+import sys
 import threading
 import time
 from datetime import datetime, timezone
@@ -11,13 +15,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from decyde import __version__
+from decyde import __version__, attachments
 from decyde.delivery import deliver, delivery_loop, dismiss_question, notify_new, record_answer
 from decyde import update
 from decyde.herdr_sidebar import REFRESH_SECONDS, Sidebar
 from decyde.store import DB_PATH, change_marker, connect, get_question, human_name, row_dict
 
 INDEX_HTML = Path(__file__).resolve().parent / "web" / "index.html"
+IMAGE_URL = re.compile(r"/api/questions/(\d+)/images/(\d+)")
+MAX_BODY = 64 * 1024 * 1024  # an answer with its images, base64 encoded
 
 
 class Hub:
@@ -75,7 +81,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def read_json(self) -> dict:
         n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_BODY:
+            raise ValueError("the images are too large to send together")
         return json.loads(self.rfile.read(n) or b"{}")
+
+    def send_image(self, qid: str, number: str) -> None:
+        q = get_question(connect(), int(qid))
+        items = q["attachments"] if q else []
+        path = Path(items[int(number) - 1]["path"]) if 0 < int(number) <= len(items) else None
+        if not path or not path.is_file():
+            return self.send_json({"error": "not found"}, 404)
+        body = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", attachments.TYPES.get(attachments.sniff(body), "application/octet-stream"))
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "private, max-age=3600")
+        self.end_headers()
+        self.wfile.write(body)
 
     def local_host(self) -> bool:
         # Refuse DNS-rebinding: a hostile page that resolves its own name to 127.0.0.1
@@ -110,6 +132,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json([row_dict(r) for r in rows])
         elif path == "/api/events":
             self.stream_events()
+        elif IMAGE_URL.fullmatch(path):  # /api/questions/<id>/images/<n>
+            self.send_image(*IMAGE_URL.fullmatch(path).groups())
         else:
             self.send_json({"error": "not found"}, 404)
 
@@ -149,12 +173,26 @@ class Handler(BaseHTTPRequestHandler):
         if not q:
             return self.send_json({"error": "no such question"}, 404)
         if action == "answer":
-            text = (self.read_json().get("answer") or "").strip()
-            if not text:
+            try:
+                body = self.read_json()
+            except ValueError as e:
+                return self.send_json({"error": str(e)}, 413)
+            text = (body.get("answer") or "").strip()
+            images = body.get("images") or []  # base64 strings
+            if not text and not images:
                 return self.send_json({"error": "answer is empty"}, 400)
             if q["status"] == "cancelled":
                 return self.send_json({"error": "the agent withdrew this question"}, 409)
-            record_answer(conn, qid, text)
+            if len(images) > attachments.MAX_IMAGES:
+                return self.send_json({"error": f"an answer takes at most {attachments.MAX_IMAGES} images"}, 400)
+            saved = []
+            try:
+                for data in images:
+                    saved.append(attachments.entry(attachments.save(qid, base64.b64decode(data))))
+            except (ValueError, TypeError, binascii.Error, OSError) as e:
+                attachments.discard(saved)
+                return self.send_json({"error": f"could not attach: {e}"}, 400)
+            record_answer(conn, qid, text, attachments=saved)
         elif action == "dismiss":
             dismiss_question(conn, qid)
         else:
@@ -164,9 +202,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def update_loop(stop: threading.Event) -> None:
-    """Refresh the cached latest version; check() itself only hits GitHub once a day."""
+    """Hourly: refresh the cached latest version (check() itself only hits GitHub once a
+    day) and clear out old answer images."""
     while True:
         update.check()
+        try:
+            attachments.prune(connect())
+        except Exception as e:  # housekeeping must not stop the update check
+            print(f"attachment cleanup: {e}", file=sys.stderr, flush=True)
         if stop.wait(3600):
             return
 

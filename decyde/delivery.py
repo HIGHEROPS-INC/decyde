@@ -15,6 +15,7 @@ import threading
 import time
 from datetime import datetime
 
+from decyde.attachments import note, with_tokens
 from decyde.store import connect, get_question, human_name, now
 
 SHELLS = {"zsh", "bash", "fish", "sh", "dash", "ksh", "tcsh", "csh", "nu", "login", "-zsh", "-bash"}
@@ -28,7 +29,7 @@ RETRY_HOURS = 6
 def answer_prompt(q: dict) -> str:
     return (
         f"[decyde] {human_name()} answered your question #{q['id']} (\"{q['title']}\"):\n\n"
-        f"{q['answer']}\n\n"
+        f"{q['answer']}{note(q)}\n\n"
         f"Run `decyde ack {q['id']}` to mark it received, then continue your task with this decision."
     )
 
@@ -195,14 +196,16 @@ def delivery_loop(stop: threading.Event) -> None:
                     print(f"delivery #{r['id']} failed: {e}", file=sys.stderr, flush=True)
 
 
-def record_answer(conn, qid: int, text: str, background: bool = True, deliver_now: bool = True) -> None:
+def record_answer(conn, qid: int, text: str, background: bool = True, deliver_now: bool = True,
+                  attachments: list[dict] | None = None) -> None:
     """Save the answer and push it. The TUI passes deliver_now=False and leaves the push to
     the server, which is restarted on every upgrade, so a long-open TUI never delivers
-    with stale code."""
+    with stale code. `attachments` are images already saved (see decyde.attachments)."""
+    attachments = attachments or []
     conn.execute(
-        "UPDATE questions SET status='answered', answer=?, answered_at=?, updated_at=?, "
+        "UPDATE questions SET status='answered', answer=?, attachments=?, answered_at=?, updated_at=?, "
         "delivery='pending', delivered_at=NULL, acknowledged_at=NULL WHERE id=?",
-        (text, now(), now(), qid),
+        (with_tokens(text, len(attachments)), json.dumps(attachments) if attachments else None, now(), now(), qid),
     )
     if not deliver_now:
         return
