@@ -156,8 +156,6 @@ def absorb_paths(qid: int, text: str, files: dict) -> str:
         for i in range(end.start()):
             if not (text.startswith("/", i) or text.startswith("~/", i)):
                 continue
-            if i and not (text[i - 1].isspace() or text[i - 1] in "'\"(["):
-                continue
             raw = text[i:end.end()]
             source = next((p for p in (os.path.expanduser(re.sub(r"\\(.)", r"\1", raw)), os.path.expanduser(raw))
                            if os.path.isfile(p)), None)
@@ -174,7 +172,8 @@ def absorb_paths(qid: int, text: str, files: dict) -> str:
             a, b = i, end.end()
             if a and b < len(text) and text[a - 1] == text[b] and text[b] in "'\"":
                 a, b = a - 1, b + 1  # the terminal quoted the path
-            token = f"[Image #{n}]"
+            # a file dropped straight after a word arrives with no space before its path
+            token = ("" if not a or text[a - 1].isspace() else " ") + f"[Image #{n}]"
             text = text[:a] + token + text[b:]
             pos = a + len(token)
             break
