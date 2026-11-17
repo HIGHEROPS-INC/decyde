@@ -8,7 +8,8 @@ installer and `decyde update` install the latest release.
 
 ### Added
 - **Images in answers.** In the TUI, Ctrl+V while typing an answer adds the image on the
-  clipboard and a dropped image file is attached; each shows as `[Image #1]`. The web
+  clipboard and a dropped image file is attached; each shows as `[Image #1]`. Both also
+  work from the question list, where they start an answer to the selected question. The web
   inbox takes pasted, dropped or picked images, and Telegram takes a photo reply (an
   album counts as one answer). decyde saves the images under `~/.decyde/attachments/`
   and gives the agent their paths to open, so they arrive on every delivery route. HEIC,

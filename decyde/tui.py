@@ -28,7 +28,11 @@ def tui(show_splash: bool = True) -> None:
     # The system ncurses on macOS cannot report wheel-down, so read SGR mouse
     # sequences (xterm 1000 + 1006) ourselves instead of using curses.getmouse.
     # 1002 adds motion-while-pressed, which drag-to-copy needs.
-    MOUSE_ON, MOUSE_OFF = "\x1b[?1000h\x1b[?1002h\x1b[?1006h", "\x1b[?1006l\x1b[?1002l\x1b[?1000l"
+    # 2004 is bracketed paste: a paste or a dropped file arrives as one marked block, not as keys.
+    MOUSE_ON, MOUSE_OFF = "\x1b[?1000h\x1b[?1002h\x1b[?1006h\x1b[?2004h", "\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[?1000l"
+    CTRL_V = "\x16"
+    # Ctrl+V as terminals with extended keyboard reporting send it (CSI u, modifyOtherKeys)
+    CTRL_V_SEQ = re.compile(r"\[(?:118;(\d+)(?::\d+)?u|27;(\d+);118~)")
     ESC_KEYS = {"[A": "up", "OA": "up", "[B": "down", "OB": "down", "[5~": "pgup", "[6~": "pgdn",
                 "[H": "home", "OH": "home", "[F": "end", "OF": "end", "[Z": "backtab"}
 
@@ -77,6 +81,13 @@ def tui(show_splash: bool = True) -> None:
         # ---- input
 
         def read_event(wait_ms):
+            ev = next_event(wait_ms)
+            if ev and os.environ.get("DECYDE_KEYLOG"):  # to see what a terminal really sends
+                with open(os.environ["DECYDE_KEYLOG"], "a") as f:
+                    f.write(repr(ev) + "\n")
+            return ev
+
+        def next_event(wait_ms):
             scr.timeout(wait_ms)
             try:
                 ch = scr.get_wch()
@@ -102,6 +113,19 @@ def tui(show_splash: bool = True) -> None:
                         break
                 if not seq:
                     return ("key", "esc")
+                if seq == "[200~":  # bracketed paste, up to its end marker
+                    text, scr_end = "", "\x1b[201~"
+                    scr.timeout(300)
+                    while not text.endswith(scr_end) and len(text) < 200_000:
+                        try:
+                            c = scr.get_wch()
+                        except curses.error:
+                            break
+                        text += c if isinstance(c, str) else ""
+                    return ("paste", text.removesuffix(scr_end))
+                m = CTRL_V_SEQ.fullmatch(seq)
+                if m and (int(m[1] or m[2]) - 1) & 4:
+                    return ("key", CTRL_V)
                 if seq.startswith("[<"):
                     try:
                         b, x, y = (int(v) for v in seq[2:-1].split(";"))
@@ -356,12 +380,42 @@ def tui(show_splash: bool = True) -> None:
 
         # ---- prompts
 
-        def prompt_line(label, init="", qid=None, files=None):
+        def prompt_line(label, init="", qid=None, files=None, first=None):
             """One-line editor on the bottom row. Enter or [send] sends, Esc or [cancel] cancels.
             With `files` (answers only), Ctrl+V adds the clipboard image and a dropped image
-            file is taken in; each shows as [Image #N] and is recorded in `files`."""
+            file is taken in; each shows as [Image #N] and is recorded in `files`.
+            `first` is an event to handle before reading any."""
             buf = init
             note = ""
+
+            def add_text(text):
+                nonlocal buf, note
+                buf += text
+                if files is not None and attachments.EXT_END.search(buf):
+                    had = len(files)
+                    buf = attachments.absorb_paths(qid, buf, files)
+                    if len(files) > had:
+                        note = f"attached image {max(files)}"
+
+            def add_clipboard():
+                nonlocal buf, note
+                if len(files) >= attachments.MAX_IMAGES:
+                    note = f"an answer takes at most {attachments.MAX_IMAGES} images"
+                    return
+                data = attachments.clipboard_image()
+                try:
+                    saved = attachments.save(qid, data) if data else None
+                except (OSError, ValueError) as e:
+                    note = f"could not attach: {e}"
+                    return
+                if not saved:
+                    note = "no image on the clipboard"
+                    return
+                n = max(files, default=0) + 1
+                files[n] = attachments.entry(saved)
+                buf += ("" if not buf or buf.endswith(" ") else " ") + f"[Image #{n}] "
+                note = f"attached image {n}"
+
             curses.curs_set(1)
             try:
                 while True:
@@ -377,7 +431,7 @@ def tui(show_splash: bool = True) -> None:
                         put(h - 1, 1 + len(label), shown)
                         scr.move(h - 1, min(W - 2, 1 + len(label) + len(shown)))
                     draw(bar)
-                    ev = read_event(-1)
+                    ev, first = first or read_event(-1), None
                     if ev is None:
                         continue
                     if ev[0] == "click":
@@ -386,6 +440,14 @@ def tui(show_splash: bool = True) -> None:
                             return buf.strip() or None
                         if act == ("cancel",):
                             return None
+                        continue
+                    if ev[0] == "paste":
+                        note = ""
+                        pasted = " ".join(ev[1].split("\n")).replace("\r", "")
+                        if pasted.strip():
+                            add_text("".join(c for c in pasted if c.isprintable() or unicodedata.category(c) == "Zs"))
+                        elif files is not None:  # an image on the clipboard pastes as nothing
+                            add_clipboard()
                         continue
                     if ev[0] != "key":
                         continue
@@ -404,31 +466,11 @@ def tui(show_splash: bool = True) -> None:
                             buf = buf[:-1]
                     elif k == "\x15":  # Ctrl-U
                         buf = ""
-                    elif k == "\x16" and files is not None:  # Ctrl-V
-                        if len(files) >= attachments.MAX_IMAGES:
-                            note = f"an answer takes at most {attachments.MAX_IMAGES} images"
-                            continue
-                        data = attachments.clipboard_image()
-                        try:
-                            saved = attachments.save(qid, data) if data else None
-                        except (OSError, ValueError) as e:
-                            note = f"could not attach: {e}"
-                            continue
-                        if not saved:
-                            note = "no image on the clipboard"
-                            continue
-                        n = max(files, default=0) + 1
-                        files[n] = attachments.entry(saved)
-                        buf += ("" if not buf or buf.endswith(" ") else " ") + f"[Image #{n}] "
-                        note = f"attached image {n}"
+                    elif k == CTRL_V and files is not None:
+                        add_clipboard()
                     # macOS screenshot names hold a narrow no-break space, which is not "printable"
                     elif len(k) == 1 and (k.isprintable() or unicodedata.category(k) == "Zs"):
-                        buf += k
-                        if files is not None and attachments.EXT_END.search(buf):
-                            had = len(files)
-                            buf = attachments.absorb_paths(qid, buf, files)
-                            if len(files) > had:
-                                note = f"attached image {max(files)}"
+                        add_text(k)
             finally:
                 curses.curs_set(0)
 
@@ -463,9 +505,9 @@ def tui(show_splash: bool = True) -> None:
             os.unlink(path)
             return text or None
 
-        def compose(q, init=""):
+        def compose(q, init="", first=None):
             files = {}
-            send(q, prompt_line(f"#{q['id']} > ", init, q["id"], files), files)
+            send(q, prompt_line(f"#{q['id']} > ", init, q["id"], files, first), files)
 
         def send(q, text, files=None):
             files = {} if files is None else files
@@ -558,6 +600,14 @@ def tui(show_splash: bool = True) -> None:
                     st["sel"] = max(0, st["sel"] + d)
                 else:
                     st["dscroll"] = max(0, st["dscroll"] + 2 * d)
+            elif ev[0] == "paste" or ev[1] in (CTRL_V, "/", "~", "'"):
+                # An image pasted or dropped on the list starts an answer to the selected question.
+                # ("/", "~" and "'" open a dropped path in terminals without bracketed paste.)
+                q = current()
+                if q and q["status"] == "open":
+                    compose(q, first=ev)
+                elif ev[0] == "paste" or ev[1] == CTRL_V:
+                    st["flash"] = "select an open question first, then paste or drop the image"
             elif ev[1] == "tab":
                 act(("tab", (st["view"] + 1) % 3))
             elif ev[1] == "backtab":
